@@ -11,7 +11,9 @@
     "xdg-utils@latest",
     "gitflow@latest",
     "xorg.libX11@latest",
+    "openssl",
     "nodejs@latest",
+    "protobuf@latest",
   ],
   "shell": {
     "init_hook": [
