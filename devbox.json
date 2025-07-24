@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.10.7/.schema/devbox.schema.json",
+  "packages": [
+    "rustup",
+    "rustfmt",
+    "clippy",
+    "gcc",
+    "pkg-config",
+    "cmake",
+    "grcov@latest",
+    "xdg-utils@latest",
+    "gitflow@latest",
+    "xorg.libX11@latest",
+    "nodejs@latest",
+  ],
+  "shell": {
+    "init_hook": [
+      "projectDir=$(dirname $(readlink -f \"$0\"))",
+      "rustupHomeDir=\"$projectDir\"/.rustup",
+      "mkdir -p $rustupHomeDir",
+      "export RUSTUP_HOME=$rustupHomeDir",
+      "export LIBRARY_PATH=$LIBRARY_PATH:\"$projectDir/nix/profile/default/lib\"",
+      "rustup default stable",
+      "rustup component add rust-analyzer",
+    ],
+    "scripts": {
+      "test":       "cargo test -- --show-output",
+      "start":      "cargo run",
+      "build-docs": "cargo doc",
+    },
+  },
+}
