@@ -8,6 +8,7 @@ use trust_dns_resolver::AsyncResolver;
 use tokio::{task, time::sleep};
 
 pub mod mimir;
+use mimir::{ create_probe_metrics, client::send_to_mimir};
 pub mod http_probe;
 use http_probe::prelude::*;
 
@@ -51,6 +52,12 @@ async fn main() {
                             result.cert_validity_days,
                             result.http_time * 1000.0
                         );
+                        let metrics = create_probe_metrics(&result);
+                        if let Err(e) = send_to_mimir("http://localhost:9009", Some("demo"), metrics).await {
+                            println!("Failed to send metrics for {url}: {e}");
+                        } else {
+                            println!("Metrics sent successfully for {url}");
+                        }
                     }
                     Err(e) => {
                         println!("Error probing {url}: {e}");
