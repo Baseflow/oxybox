@@ -27,8 +27,8 @@ async fn main() {
 
     let connector = TlsConnector::new().expect("Failed to create TLS connector");
     let connector = TokioTlsConnector::from(connector);
-
     let resolver = AsyncResolver::tokio_from_system_conf().expect("Failed to create DNS resolver");
+
     loop {
         println!("--- Checking endpoints ---");
 

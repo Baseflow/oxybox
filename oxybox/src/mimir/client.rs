@@ -4,13 +4,10 @@ pub mod prometheus {
     }
 }
 
-pub use prometheus::prompb::{Label, Sample, TimeSeries, WriteRequest};
-
-// Other necessary imports for the client logic
-use reqwest::blocking::Client; // Use blocking client for simplicity here
-use reqwest::header::{HeaderMap, HeaderValue, CONTENT_ENCODING, CONTENT_TYPE};
+use prometheus::prompb::{Label, Sample, TimeSeries, WriteRequest};
+use reqwest::{header::{HeaderMap, HeaderValue, CONTENT_ENCODING, CONTENT_TYPE}, Client};
 use snap::raw::Encoder;
-use chrono::Utc; // For getting current time in UTC
+use chrono::Utc; 
 
 /// Sends Prometheus metrics to a Mimir remote write endpoint.
 ///
@@ -19,7 +16,7 @@ use chrono::Utc; // For getting current time in UTC
 /// * `mimir_endpoint` - The base URL of your Mimir instance (e.g., "http://localhost:9009").
 /// * `tenant_id` - An optional tenant ID string for multi-tenant Mimir setups.
 /// * `metrics` - A vector of `TimeSeries` to send.
-pub fn send_to_mimir(
+pub async fn send_to_mimir(
     mimir_endpoint: &str,
     tenant_id: Option<&str>,
     metrics: Vec<TimeSeries>,
@@ -31,19 +28,15 @@ pub fn send_to_mimir(
 
     let write_request = WriteRequest {
         timeseries: metrics,
-        // reserved_fields: Vec::new(), // Older Prost versions might require this
         ..Default::default() // Ensures forward compatibility with future fields
     };
 
-    // 1. Serialize the WriteRequest to Protobuf bytes
     let mut buf = Vec::new();
     prost::Message::encode(&write_request, &mut buf)?;
 
-    // 2. Compress the Protobuf bytes using Snappy
     let mut encoder = Encoder::new();
     let compressed_data = encoder.compress_vec(&buf)?;
 
-    // 3. Prepare HTTP headers
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_ENCODING, HeaderValue::from_static("snappy"));
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/x-protobuf"));
@@ -55,23 +48,18 @@ pub fn send_to_mimir(
         headers.insert("X-Scope-OrgID", HeaderValue::from_str(id)?);
     }
 
-    // 4. Send the HTTP POST request to Mimir
     let client = Client::new();
     let response = client
         .post(format!("{mimir_endpoint}/api/v1/push")) // Mimir's remote write endpoint
         .headers(headers)
         .body(compressed_data)
-        .send()?;
+        .send().await?;
 
-    // 5. Handle the Mimir's response
-    if response.status().is_success() {
-        println!("Metrics sent successfully to Mimir!");
-    } else {
+    if !response.status().is_success() {
         let status = response.status();
-        let body = response.text()?;
-        eprintln!("Failed to send metrics to Mimir. Status: {status}. Response body: {body}");
-        return Err(format!("Mimir API error: {status} - {body}").into());
-    }
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Failed to push to Mimir: {status} - {body}").into())
+    } 
 
     Ok(())
 }
@@ -115,8 +103,8 @@ pub fn create_time_series(
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_create_and_send_metrics() {
+    #[tokio::test]
+    async fn test_create_and_send_metrics() {
         // NOTE: This test will attempt to send data to a live Mimir instance.
         // Make sure Mimir is running at this address, or comment out for CI.
         let mimir_url = "http://localhost:9009"; // Adjust to your Mimir instance
@@ -150,7 +138,7 @@ mod tests {
 
 
         // Attempt to send
-        match send_to_mimir(mimir_url, tenant_id, metrics_to_send) {
+        match send_to_mimir(mimir_url, tenant_id, metrics_to_send).await {
             Ok(_) => println!("Test metrics sent successfully."),
             Err(e) => eprintln!("Failed to send test metrics: {}", e),
         }
