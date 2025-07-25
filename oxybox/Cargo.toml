@@ -14,6 +14,11 @@ prost = "0.14"         # Protobuf runtime
 prost-types = "0.14"   # For well-known Protobuf types (like Timestamp, not directly used here but good to have)
 snap = "1.1"           # For Snappy compression
 chrono = "0.4"         # For current timestamp in milliseco# Add these for the certificate checking functionality
+rustls = "0.22"
+tokio-rustls = "0.25"
+rustls-native-certs = "0.7"
+trust-dns-resolver = { version = "0.23", features = ["tokio-runtime", "system-config"] }
+webpki-roots = "0.26"
 
 [build-dependencies]
 prost-build = "0.14"   # Protobuf code generator for Prost

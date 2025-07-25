@@ -21,7 +21,7 @@ fn main() -> Result<()> {
     // Configure prost_build
     let mut config = prost_build::Config::new();
 
-    config.disable_comments(&["."]);
+    config.disable_comments(["."]);
     config.protoc_arg("--experimental_allow_proto3_optional");
 
     // Set the include paths for protoc.

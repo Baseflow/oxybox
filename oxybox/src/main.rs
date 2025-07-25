@@ -4,11 +4,12 @@ use std::time::Duration;
 
 use tokio_native_tls::TlsConnector as TokioTlsConnector;
 
+use trust_dns_resolver::AsyncResolver;
 use tokio::{task, time::sleep};
 
 pub mod mimir;
-pub mod probe;
-use probe::prelude::*;
+pub mod http_probe;
+use http_probe::prelude::*;
 
 #[tokio::main]
 async fn main() {
@@ -24,9 +25,10 @@ async fn main() {
         .build()
         .expect("Failed to create HTTP client");
 
-    let connector = TlsConnector::new().ok().expect("Failed to create TLS connector");
+    let connector = TlsConnector::new().expect("Failed to create TLS connector");
     let connector = TokioTlsConnector::from(connector);
 
+    let resolver = AsyncResolver::tokio_from_system_conf().expect("Failed to create DNS resolver");
     loop {
         println!("--- Checking endpoints ---");
 
@@ -36,9 +38,10 @@ async fn main() {
             let url = url.to_string();
             let client = client.clone();
             let connector = connector.clone();
+            let resolver = resolver.clone();
 
             let handle = task::spawn(async move {
-                match probe_url(client, &connector, &url).await {
+                match probe_url(client, &connector, &resolver, &url).await {
                     Ok(result) => {
                         println!(
                             "URL: {}, Status: {:?}, DNS Time: {:.2} ms, Cert Validity Days: {:?}, Elapsed: {:.2} ms",
@@ -50,7 +53,7 @@ async fn main() {
                         );
                     }
                     Err(e) => {
-                        println!("Error probing {}: {}", url, e);
+                        println!("Error probing {url}: {e}");
                     }
                 }
             });

@@ -58,7 +58,7 @@ pub fn send_to_mimir(
     // 4. Send the HTTP POST request to Mimir
     let client = Client::new();
     let response = client
-        .post(format!("{}/api/v1/push", mimir_endpoint)) // Mimir's remote write endpoint
+        .post(format!("{mimir_endpoint}/api/v1/push")) // Mimir's remote write endpoint
         .headers(headers)
         .body(compressed_data)
         .send()?;
@@ -69,8 +69,8 @@ pub fn send_to_mimir(
     } else {
         let status = response.status();
         let body = response.text()?;
-        eprintln!("Failed to send metrics to Mimir. Status: {}. Response body: {}", status, body);
-        return Err(format!("Mimir API error: {} - {}", status, body).into());
+        eprintln!("Failed to send metrics to Mimir. Status: {status}. Response body: {body}");
+        return Err(format!("Mimir API error: {status} - {body}").into());
     }
 
     Ok(())
