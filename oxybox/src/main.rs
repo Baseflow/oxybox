@@ -1,5 +1,8 @@
+use native_tls::TlsConnector;
 use reqwest::Client;
 use std::time::Duration;
+
+use tokio_native_tls::TlsConnector as TokioTlsConnector;
 
 use tokio::{task, time::sleep};
 
@@ -21,6 +24,9 @@ async fn main() {
         .build()
         .expect("Failed to create HTTP client");
 
+    let connector = TlsConnector::new().ok().expect("Failed to create TLS connector");
+    let connector = TokioTlsConnector::from(connector);
+
     loop {
         println!("--- Checking endpoints ---");
 
@@ -29,9 +35,10 @@ async fn main() {
         for url in &endpoints {
             let url = url.to_string();
             let client = client.clone();
+            let connector = connector.clone();
 
             let handle = task::spawn(async move {
-                match probe_url(client, &url).await {
+                match probe_url(client, &connector, &url).await {
                     Ok(result) => {
                         println!(
                             "URL: {}, Status: {:?}, DNS Time: {:.2} ms, Cert Validity Days: {:?}, Elapsed: {:.2} ms",

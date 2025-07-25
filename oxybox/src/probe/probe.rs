@@ -3,7 +3,6 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use url::Url;
 
-use native_tls::TlsConnector;
 use tokio_native_tls::TlsConnector as TokioTlsConnector;
 use tokio::net::lookup_host;
 use x509_parser::parse_x509_certificate;
@@ -21,13 +20,12 @@ async fn measure_dns_time(host: &str) -> Option<f64> {
     }
 }
 
-async fn get_cert_validity_days(host: &str) -> Option<i64> {
+async fn get_cert_validity_days(host: &str, connector: &TokioTlsConnector) -> Option<i64> {
     let host1 = host.to_string(); 
 
     let result = tokio::task::spawn_blocking(move || {
         let addr = format!("{}:443", host1);
         let socket_addr = addr.to_socket_addrs().ok()?.next()?;
-
         Some(socket_addr)
     })
     .await
@@ -36,8 +34,6 @@ async fn get_cert_validity_days(host: &str) -> Option<i64> {
     // Connect asynchronously
     let stream = tokio::net::TcpStream::connect(result).await.ok()?;
 
-    let connector = TlsConnector::new().ok()?;
-    let connector = TokioTlsConnector::from(connector);
 
     let tls_stream = connector.connect(host, stream).await.ok()?;
 
@@ -58,7 +54,7 @@ async fn get_cert_validity_days(host: &str) -> Option<i64> {
     Some((not_after - now) / 86400)
 }
 
-pub async fn probe_url(client: reqwest::Client, url: &str) -> Result<ProbeResult, String> {
+pub async fn probe_url(client: reqwest::Client, connector: &TokioTlsConnector, url: &str) -> Result<ProbeResult, String> {
     // Simulate HTTP request and response (replace with actual HTTP client logic)
     let url = url.to_string();
     let client = client.clone();
@@ -88,7 +84,7 @@ pub async fn probe_url(client: reqwest::Client, url: &str) -> Result<ProbeResult
             if url.starts_with("http://") || (url.starts_with("https://")) && resp.version() == reqwest::Version::HTTP_09 {
                 None // HTTP/0.9 does not support TLS
             } else {
-                get_cert_validity_days(&host).await
+                get_cert_validity_days(&host, &connector).await
             }
         },
         Err(_) => None,
