@@ -129,7 +129,7 @@ pub async fn probe_url(client: reqwest::Client, connector: &TokioTlsConnector, r
             // Calculate processing_time by deducting known connection setup times
             // Use the times from the get_tls_probe_metrics call for deduction.
             // Ensure the result doesn't go negative due to measurement inaccuracies or connection reuse.
-            let deducted_time = probe_result.dns_time.unwrap_or(0.0) + probe_result.connect_time.unwrap_or(0.0) + probe_result.tls_time.unwrap_or(0.0);
+            let deducted_time = probe_result.connect_time.unwrap_or(0.0) + probe_result.tls_time.unwrap_or(0.0);
             let actual_processing_time = (reqwest_send_duration - deducted_time).max(0.0);
             let http_status_val = resp.status().as_u16();
             let http_version_val = convert_http_version(resp.version());

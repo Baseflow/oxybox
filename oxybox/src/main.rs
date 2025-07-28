@@ -15,8 +15,8 @@ use http_probe::prelude::*;
 #[tokio::main]
 async fn main() {
     let endpoints = vec![
-        // "https://www.google.com",
-        // "https://www.github.com",
+        "https://www.google.com",
+        "https://www.github.com",
         // "https://expired.badssl.com",
         // "http://example.com",
         "https://kloosterdolphia.nl",
