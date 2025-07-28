@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json",  "rustls-tls", "http3"] }
 native-tls = "0.2"
 tokio-native-tls = "0.3"
 x509-parser = "0.17"
@@ -16,6 +16,8 @@ chrono = "0.4"
 rustls = "0.23"
 tokio-rustls = "0.26"
 trust-dns-resolver = { version = "0.23", features = ["tokio-runtime", "system-config"] }
+hyper = { version = "1.6.0", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] } 
 
 [build-dependencies]
 prost-build = "0.14"   # Protobuf code generator for Prost
