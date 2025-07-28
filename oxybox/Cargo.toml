@@ -18,6 +18,9 @@ tokio-rustls = "0.26"
 trust-dns-resolver = { version = "0.23", features = ["tokio-runtime", "system-config"] }
 hyper = { version = "1.6.0", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] } 
+serde = { version = "1.0", features = ["derive"] }
+unicode-truncate = "2.0"
+serde_yaml = "0.9"
 
 [build-dependencies]
 prost-build = "0.14"   # Protobuf code generator for Prost

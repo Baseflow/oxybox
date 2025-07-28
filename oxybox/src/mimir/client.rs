@@ -4,10 +4,13 @@ pub mod prometheus {
     }
 }
 
+use chrono::Utc;
 use prometheus::prompb::{Label, Sample, TimeSeries, WriteRequest};
-use reqwest::{header::{HeaderMap, HeaderValue, CONTENT_ENCODING, CONTENT_TYPE}, Client};
+use reqwest::{
+    Client,
+    header::{CONTENT_ENCODING, CONTENT_TYPE, HeaderMap, HeaderValue},
+};
 use snap::raw::Encoder;
-use chrono::Utc; 
 
 /// Sends Prometheus metrics to a Mimir remote write endpoint.
 ///
@@ -39,7 +42,10 @@ pub async fn send_to_mimir(
 
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_ENCODING, HeaderValue::from_static("snappy"));
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/x-protobuf"));
+    headers.insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static("application/x-protobuf"),
+    );
     headers.insert(
         "X-Prometheus-Remote-Write-Version",
         HeaderValue::from_static("0.1.0"),
@@ -53,13 +59,14 @@ pub async fn send_to_mimir(
         .post(format!("{mimir_endpoint}/api/v1/push")) // Mimir's remote write endpoint
         .headers(headers)
         .body(compressed_data)
-        .send().await?;
+        .send()
+        .await?;
 
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("Failed to push to Mimir: {status} - {body}").into())
-    } 
+        return Err(format!("Failed to push to Mimir: {status} - {body}").into());
+    }
 
     Ok(())
 }
@@ -93,7 +100,7 @@ pub fn create_time_series(
     TimeSeries {
         labels: all_labels,
         samples: vec![sample],
-        exemplars: vec![],   // For tracing, leave empty if not used
+        exemplars: vec![],  // For tracing, leave empty if not used
         histograms: vec![], // For native histograms, leave empty if not used
     }
 }
@@ -116,7 +123,7 @@ mod tests {
         metrics_to_send.push(create_time_series(
             "my_app_http_requests_total",
             &[("method", "GET"), ("status", "200")],
-            1.0, // For a counter, typically increment by 1 per event
+            1.0,  // For a counter, typically increment by 1 per event
             None, // Use current timestamp
         ));
 
@@ -124,7 +131,7 @@ mod tests {
         metrics_to_send.push(create_time_series(
             "my_app_cpu_usage_percent",
             &[("host", "server-a")],
-            25.5, // Current value for a gauge
+            25.5,                                // Current value for a gauge
             Some(Utc::now().timestamp_millis()), // Specific timestamp
         ));
 
@@ -135,7 +142,6 @@ mod tests {
             1.0,
             None,
         ));
-
 
         // Attempt to send
         match send_to_mimir(mimir_url, tenant_id, metrics_to_send).await {

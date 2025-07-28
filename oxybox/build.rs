@@ -2,14 +2,9 @@ use std::io::Result;
 use std::path::PathBuf;
 
 fn main() -> Result<()> {
-    let proto_roots = [
-        "protos", 
-        "protos/prometheus/prompb", 
-    ];
+    let proto_roots = ["protos", "protos/prometheus/prompb"];
 
-    let protos_to_compile = vec![
-        "prometheus/prompb/remote.proto", 
-    ];
+    let protos_to_compile = vec!["prometheus/prompb/remote.proto"];
 
     let mut config = prost_build::Config::new();
 

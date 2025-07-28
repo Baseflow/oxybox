@@ -25,7 +25,12 @@ const PROBE_HTTP_SSL_EARLIEST_EXPIERY_METRIC: &str = "probe_ssl_earliest_cert_ex
 const BLACKBOX_JOB: &str = "blackbox";
 const HTTP_MODULE: &str = "http_2xx";
 
-fn create_time_series(metric_name: &str, instance: &str, value: f64, additional_labels: Option<Vec<(&str, &str)>>) -> prompb::TimeSeries {
+fn create_time_series(
+    metric_name: &str,
+    instance: &str,
+    value: f64,
+    additional_labels: Option<Vec<(&str, &str)>>,
+) -> prompb::TimeSeries {
     // combine the mandatory labels with any additional labels
     let mut labels: Vec<(&str, &str)> = vec![
         (INSTANCE_LABEL, instance),
@@ -40,50 +45,113 @@ fn create_time_series(metric_name: &str, instance: &str, value: f64, additional_
     client::create_time_series(metric_name, &labels, value, None)
 }
 
-pub fn create_probe_metrics(
-    probe_result: &crate::ProbeResult) -> Vec<prompb::TimeSeries> {
+pub fn create_probe_metrics(probe_result: &crate::ProbeResult) -> Vec<prompb::TimeSeries> {
     let mut metrics = Vec::new();
-    let probe_successful = if probe_result.http_status.unwrap_or_default() == 200 { 1.0 } else { 0.0 };
-    metrics.push(create_time_series(PROBE_SUCCESS_METRIC, &probe_result.url, probe_successful, None));
+    let probe_successful = if probe_result.http_status.unwrap_or_default() == 200 {
+        1.0
+    } else {
+        0.0
+    };
+    metrics.push(create_time_series(
+        PROBE_SUCCESS_METRIC,
+        &probe_result.url,
+        probe_successful,
+        None,
+    ));
 
     if let Some(dns_time) = probe_result.dns_time {
-        metrics.push(create_time_series(PROBE_HTTP_DURATION_METRIC, &probe_result.url, dns_time, Some(vec![("phase", "resolve")])));
+        metrics.push(create_time_series(
+            PROBE_HTTP_DURATION_METRIC,
+            &probe_result.url,
+            dns_time,
+            Some(vec![("phase", "resolve")]),
+        ));
     };
     if let Some(connect_time) = probe_result.connect_time {
-        metrics.push(create_time_series(PROBE_HTTP_DURATION_METRIC, &probe_result.url, connect_time, Some(vec![("phase", "connect")])));
+        metrics.push(create_time_series(
+            PROBE_HTTP_DURATION_METRIC,
+            &probe_result.url,
+            connect_time,
+            Some(vec![("phase", "connect")]),
+        ));
     };
     if let Some(tls_time) = probe_result.tls_time {
-        metrics.push(create_time_series(PROBE_HTTP_DURATION_METRIC, &probe_result.url, tls_time, Some(vec![("phase", "tls")])));
+        metrics.push(create_time_series(
+            PROBE_HTTP_DURATION_METRIC,
+            &probe_result.url,
+            tls_time,
+            Some(vec![("phase", "tls")]),
+        ));
     };
     if let Some(processing_time) = probe_result.processing_time {
-        metrics.push(create_time_series(PROBE_HTTP_DURATION_METRIC, &probe_result.url, processing_time, Some(vec![("phase", "processing")])));
+        metrics.push(create_time_series(
+            PROBE_HTTP_DURATION_METRIC,
+            &probe_result.url,
+            processing_time,
+            Some(vec![("phase", "processing")]),
+        ));
     };
     if let Some(transfer_time) = probe_result.transfer_time {
-        metrics.push(create_time_series(PROBE_HTTP_DURATION_METRIC, &probe_result.url, transfer_time, Some(vec![("phase", "transfer")])));
+        metrics.push(create_time_series(
+            PROBE_HTTP_DURATION_METRIC,
+            &probe_result.url,
+            transfer_time,
+            Some(vec![("phase", "transfer")]),
+        ));
     };
 
-    metrics.push(create_time_series(PROBE_DURATION_METRIC, &probe_result.url, probe_result.total_probe_time, None));
+    metrics.push(create_time_series(
+        PROBE_DURATION_METRIC,
+        &probe_result.url,
+        probe_result.total_probe_time,
+        None,
+    ));
     if let Some(http_status) = probe_result.http_status {
-        metrics.push(create_time_series(PROBE_HTTP_STATUS_METRIC, &probe_result.url, http_status as f64, None));
+        metrics.push(create_time_series(
+            PROBE_HTTP_STATUS_METRIC,
+            &probe_result.url,
+            http_status as f64,
+            None,
+        ));
     }
 
     if let Some(dns_time) = probe_result.dns_time {
-        metrics.push(create_time_series(PROBE_DNS_LOOKUP_TIME_METRIC, &probe_result.url, dns_time, None));
+        metrics.push(create_time_series(
+            PROBE_DNS_LOOKUP_TIME_METRIC,
+            &probe_result.url,
+            dns_time,
+            None,
+        ));
     }
 
-    let ssl_enabled = if probe_result.cert_validity_seconds.is_some() { 1.0 } else { 0.0 };
-    metrics.push(create_time_series(PROBE_HTTP_SSL_ENABLED_METRIC, &probe_result.url, ssl_enabled, None));
+    let ssl_enabled = if probe_result.cert_validity_seconds.is_some() {
+        1.0
+    } else {
+        0.0
+    };
+    metrics.push(create_time_series(
+        PROBE_HTTP_SSL_ENABLED_METRIC,
+        &probe_result.url,
+        ssl_enabled,
+        None,
+    ));
 
     if let Some(cert_validity_seconds) = probe_result.cert_validity_seconds {
-        metrics.push(create_time_series(PROBE_HTTP_SSL_EARLIEST_EXPIERY_METRIC, &probe_result.url, cert_validity_seconds, None));
+        metrics.push(create_time_series(
+            PROBE_HTTP_SSL_EARLIEST_EXPIERY_METRIC,
+            &probe_result.url,
+            cert_validity_seconds,
+            None,
+        ));
     }
     if let Some(http_version) = probe_result.http_version {
-        metrics.push(create_time_series(PROBE_HTTP_VERSION_METRIC, &probe_result.url, http_version, None));
+        metrics.push(create_time_series(
+            PROBE_HTTP_VERSION_METRIC,
+            &probe_result.url,
+            http_version,
+            None,
+        ));
     }
 
     metrics
-
 }
-
-
-
