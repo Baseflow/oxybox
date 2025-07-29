@@ -66,7 +66,8 @@ async fn main() {
                     let connector = tls_connector.clone();
                     let resolver = resolver.clone();
                     let target = target.clone();
-                    let organisation_id = key.clone();
+                    let tenant_name = key.clone();
+                    let organisation_id = org_config.organisation_id.clone();
                     let mimir_target = mimir_target.clone();
 
                     let handle = tokio::spawn(async move {
@@ -82,10 +83,10 @@ async fn main() {
                                     .duration_since(UNIX_EPOCH)
                                     .expect("Cannot determine time")
                                     .as_secs_f64();
-                                let organisation_id = to_fixed_width(&organisation_id, max_org_width);
+                                let tenant_name = to_fixed_width(&tenant_name, max_org_width);
                                 if is_accepted {
                                     println!(
-                                        "[{organisation_id}] ✅ URL: {}, Status: {:?}, Elapsed: {:.2}ms, Cert: {}",
+                                        "[{tenant_name}] ✅ URL: {}, Status: {:?}, Elapsed: {:.2}ms, Cert: {}",
                                         url,
                                         result.http_status,
                                         result.total_probe_time * 1000.0,
@@ -96,7 +97,7 @@ async fn main() {
                                     );
                                 } else {
                                     println!(
-                                        "[{organisation_id}] ❌ Unexpected status for {url}: {:?} (accepted: {:?})",
+                                        "[{tenant_name}] ❌ Unexpected status for {url}: {:?} (accepted: {:?})",
                                         result.http_status, target.accepted_status_codes
                                     );
                                 }
@@ -110,12 +111,12 @@ async fn main() {
                                 .await
                                 {
                                     println!(
-                                        "[{organisation_id}] Failed to send metrics for {url}: {e}"
+                                        "[{tenant_name}] Failed to send metrics for {url}: {e}"
                                     );
                                 }
                             }
                             Err(e) => {
-                                println!("[{organisation_id}] ❌ Probe error for {url}: {e}");
+                                println!("[{tenant_name}] ❌ Probe error for {url}: {e}");
                             }
                         }
                     });
