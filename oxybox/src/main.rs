@@ -21,7 +21,8 @@ fn to_fixed_width(input: &str, width: usize) -> String {
 
 #[tokio::main]
 async fn main() {
-    let config_str = std::fs::read_to_string("config.yml").expect("Failed to read config.yaml");
+    let config_file_location = std::env::var("CONFIG_FILE").unwrap_or_else(|_| "config.yml".to_string());
+    let config_str = std::fs::read_to_string(config_file_location).expect("Failed to read config.yaml");
     let config: Config = serde_yaml::from_str(&config_str).expect("Invalid YAML");
 
 
