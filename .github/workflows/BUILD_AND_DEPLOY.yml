@@ -1,0 +1,37 @@
+name: "Build docker container image"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'oxybox/src/**'
+      - '.github/workflows/BUILD_AND_DEPLOY.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'oxybox/src/**'
+      - '.github/workflows/BUILD_AND_DEPLOY.yml'
+
+jobs:
+  # validate that the docker image is built.
+  # will only scan for vulnerabilities and push to acr on push events
+  docker-build:
+    name: Build docker image
+    runs-on: baseflow-runner
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout
+      - uses: Baseflow/github-actions/docker@main
+        name: Build docker image
+        with:
+          username: ${{ secrets.BASEFLOW_ACR_USERNAME }}
+          password: ${{ secrets.BASEFLOW_ACR_PASSWORD }}
+          push: ${{ github.event_name != 'pull_request' }}
+          vulnerability_scan: ${{ github.event_name != 'pull_request' }}
+          version: 1.0
+          context: ./oxybox
