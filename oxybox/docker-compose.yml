@@ -1,0 +1,12 @@
+version: '3.8' # Using a recent Docker Compose file format version
+
+services:
+  oxybox-app:
+    build: .
+    network_mode: "host"
+    volumes:
+      - ./config.yml:/config.yml 
+    restart: unless-stopped
+    environment:
+      MIRMIR_ENDPOINT: 'https://dummy.mimir.com'
+

@@ -24,6 +24,7 @@ async fn main() {
     let config_str = std::fs::read_to_string("config.yml").expect("Failed to read config.yaml");
     let config: Config = serde_yaml::from_str(&config_str).expect("Invalid YAML");
 
+
     let mut builder = native_tls::TlsConnector::builder();
     builder.danger_accept_invalid_certs(true);
 
@@ -38,12 +39,15 @@ async fn main() {
         .unwrap_or(10); // fallback to 10 if empty
 
 
+    let mimir_endpoint = std::env::var("MIMIR_ENDPOINT").unwrap_or_else(|_| "http://localhost:9009".to_string());
+    println!("Using Mimir endpoint: {}", mimir_endpoint);
 
     for (key, org_config) in config {
         let tls_connector = TokioTlsConnector::from(tls_connector.clone());
         let resolver = resolver.clone();
         let targets = org_config.targets.clone();
-        let interval = org_config.polling_interval_seconds;
+        let interval = org_config.polling_interval_seconds; 
+        let mimir_target = mimir_endpoint.clone();
 
         tokio::spawn(async move {
             let client = Client::builder()
@@ -62,6 +66,7 @@ async fn main() {
                     let resolver = resolver.clone();
                     let target = target.clone();
                     let organisation_id = key.clone();
+                    let mimir_target = mimir_target.clone();
 
                     let handle = tokio::spawn(async move {
                         let url = target.url.clone();
@@ -97,7 +102,7 @@ async fn main() {
 
                                 let metrics = create_probe_metrics(&result);
                                 if let Err(e) = send_to_mimir(
-                                    "http://localhost:9009",
+                                    &mimir_target,
                                     Some(&organisation_id),
                                     metrics,
                                 )
