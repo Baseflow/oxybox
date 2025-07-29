@@ -28,12 +28,6 @@ pub async fn send_to_mimir(
         println!("No metrics to send.");
         return Ok(());
     }
-    println!(
-        "Sending {} metrics for tenant {} to Mimir at {}",
-        metrics.len(),
-        tenant_id.as_deref().unwrap_or("unknown"),
-        mimir_endpoint
-    );
 
     let write_request = WriteRequest {
         timeseries: metrics,
@@ -74,7 +68,6 @@ pub async fn send_to_mimir(
         eprintln!("Failed to push to Mimir: {} - {}", status, body);
         return Err(format!("Failed to push to Mimir: {status} - {body}").into());
     }
-    println!("Metrics sent successfully to Mimir.");
     Ok(())
 }
 
