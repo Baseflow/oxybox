@@ -29,8 +29,9 @@ pub async fn send_to_mimir(
         return Ok(());
     }
     println!(
-        "Sending {} metrics to Mimir at {}",
+        "Sending {} metrics for tenant {} to Mimir at {}",
         metrics.len(),
+        tenant_id.as_deref().unwrap_or("unknown"),
         mimir_endpoint
     );
 
