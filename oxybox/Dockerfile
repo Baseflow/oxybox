@@ -3,7 +3,6 @@ ENV RUSTFLAGS='--cfg reqwest_unstable'
 RUN mkdir /source
 WORKDIR /source
 COPY ./Cargo.toml .
-COPY ./Cargo.lock .
 COPY ./src/ ./src/
 COPY ./protos / ./protos/
 COPY ./build.rs .
