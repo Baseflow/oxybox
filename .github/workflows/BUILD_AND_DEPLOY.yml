@@ -33,5 +33,5 @@ jobs:
           password: ${{ secrets.BASEFLOW_ACR_PASSWORD }}
           push: ${{ github.event_name != 'pull_request' }}
           vulnerability_scan: ${{ github.event_name != 'pull_request' }}
-          version: 1.8
+          version: 1.9
           context: ./oxybox

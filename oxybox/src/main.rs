@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::time::sleep;
 use tokio_native_tls::TlsConnector as TokioTlsConnector;
-use trust_dns_resolver::AsyncResolver;
+use trust_dns_resolver::{config::{NameServerConfigGroup, ResolverConfig, ResolverOpts}, TokioAsyncResolver};
 
 pub mod mimir;
 use mimir::{client::send_to_mimir, create_probe_metrics};
@@ -23,6 +23,7 @@ fn to_fixed_width(input: &str, width: usize) -> String {
 async fn main() {
     let config_file_location = std::env::var("CONFIG_FILE").unwrap_or_else(|_| "config.yml".to_string());
     let config_str = std::fs::read_to_string(config_file_location).expect("Failed to read config.yaml");
+    let dns_host = std::env::var("DNS_HOST").unwrap_or_else(|_| "1.1.1.1".to_string());
     let config: Config = serde_yaml::from_str(&config_str).expect("Invalid YAML");
 
 
@@ -31,7 +32,19 @@ async fn main() {
 
     let tls_connector = builder.build().expect("Failed to build TLS connector");
     let tls_connector = TokioTlsConnector::from(tls_connector);
-    let resolver = AsyncResolver::tokio_from_system_conf().expect("DNS resolver failed");
+    let mut opts = ResolverOpts::default();
+    opts.attempts = 3;              // Retry up to 3 times
+    opts.timeout = std::time::Duration::from_millis(500); // Fast timeout
+
+    let name_servers = NameServerConfigGroup::from_ips_clear(
+        &[std::net::IpAddr::V4(dns_host.parse().unwrap())],
+        53,
+        true,
+    );
+
+    let resolver_config = ResolverConfig::from_parts(None, vec![], name_servers);
+
+    let resolver = TokioAsyncResolver::tokio(resolver_config, opts);
     
     let max_org_width = config
         .keys()
