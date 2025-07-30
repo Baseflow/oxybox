@@ -102,7 +102,7 @@ async fn main() {
                                     );
                                 }
 
-                                let metrics = create_probe_metrics(&result);
+                                let metrics = create_probe_metrics(&result, is_accepted);
                                 if let Err(e) = send_to_mimir(
                                     &mimir_target,
                                     Some(&organisation_id),

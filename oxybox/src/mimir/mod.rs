@@ -22,8 +22,8 @@ const PROBE_HTTP_VERSION_METRIC: &str = "probe_http_version";
 // const PROBE_TOTAL_DURATION_METRIC: &str = "probe_total_duration_seconds";
 const PROBE_HTTP_SSL_EARLIEST_EXPIERY_METRIC: &str = "probe_ssl_earliest_cert_expiry";
 
-const BLACKBOX_JOB: &str = "blackbox";
-const HTTP_MODULE: &str = "oxybox_http";
+const BLACKBOX_JOB: &str = "oxybox";
+const HTTP_MODULE: &str = "http_probe";
 
 fn create_time_series(
     metric_name: &str,
@@ -45,13 +45,13 @@ fn create_time_series(
     client::create_time_series(metric_name, &labels, value, None)
 }
 
-pub fn create_probe_metrics(probe_result: &crate::ProbeResult) -> Vec<prompb::TimeSeries> {
+pub fn create_probe_metrics(probe_result: &crate::ProbeResult, probe_success: bool) -> Vec<prompb::TimeSeries> {
     let mut metrics = Vec::new();
-    let probe_successful = if probe_result.http_status.unwrap_or_default() == 200 {
-        1.0
-    } else {
-        0.0
+    let probe_successful = match probe_success {
+        true => 1.0,
+        false => 0.0,
     };
+
     metrics.push(create_time_series(
         PROBE_SUCCESS_METRIC,
         &probe_result.url,
