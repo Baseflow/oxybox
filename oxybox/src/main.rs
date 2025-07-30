@@ -28,7 +28,7 @@ async fn main() {
         std::env::var("CONFIG_FILE").unwrap_or_else(|_| "config.yml".to_string());
     let config_str =
         std::fs::read_to_string(config_file_location).expect("Failed to read config.yaml");
-    let dns_hosts = std::env::var("DNS_HOST").unwrap_or_else(|_| "1.1.1.1, 8.8.8.8".to_string());
+    let dns_hosts = std::env::var("DNS_HOSTS").unwrap_or_else(|_| "1.1.1.1, 8.8.8.8".to_string());
 
     let dns_host_vec: Vec<&str> = dns_hosts.split(',').map(str::trim).collect();
 
