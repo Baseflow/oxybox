@@ -45,7 +45,10 @@ fn create_time_series(
     client::create_time_series(metric_name, &labels, value, None)
 }
 
-pub fn create_probe_metrics(probe_result: &crate::ProbeResult, probe_success: bool) -> Vec<prompb::TimeSeries> {
+pub fn create_probe_metrics(
+    probe_result: &crate::ProbeResult,
+    probe_success: bool,
+) -> Vec<prompb::TimeSeries> {
     let mut metrics = Vec::new();
     let probe_successful = match probe_success {
         true => 1.0,

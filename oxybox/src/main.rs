@@ -1,10 +1,13 @@
 use config::model::Config;
 use reqwest::Client;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{net::IpAddr, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 use tokio::time::sleep;
 use tokio_native_tls::TlsConnector as TokioTlsConnector;
-use trust_dns_resolver::{config::{NameServerConfigGroup, ResolverConfig, ResolverOpts}, TokioAsyncResolver};
+use trust_dns_resolver::{
+    TokioAsyncResolver,
+    config::{NameServerConfig, NameServerConfigGroup, Protocol, ResolverConfig, ResolverOpts},
+};
 
 pub mod mimir;
 use mimir::{client::send_to_mimir, create_probe_metrics};
@@ -21,11 +24,15 @@ fn to_fixed_width(input: &str, width: usize) -> String {
 
 #[tokio::main]
 async fn main() {
-    let config_file_location = std::env::var("CONFIG_FILE").unwrap_or_else(|_| "config.yml".to_string());
-    let config_str = std::fs::read_to_string(config_file_location).expect("Failed to read config.yaml");
-    let dns_host = std::env::var("DNS_HOST").unwrap_or_else(|_| "1.1.1.1".to_string());
-    let config: Config = serde_yaml::from_str(&config_str).expect("Invalid YAML");
+    let config_file_location =
+        std::env::var("CONFIG_FILE").unwrap_or_else(|_| "config.yml".to_string());
+    let config_str =
+        std::fs::read_to_string(config_file_location).expect("Failed to read config.yaml");
+    let dns_hosts = std::env::var("DNS_HOST").unwrap_or_else(|_| "1.1.1.1, 8.8.8.8".to_string());
 
+    let dns_host_vec: Vec<&str> = dns_hosts.split(',').map(str::trim).collect();
+
+    let config: Config = serde_yaml::from_str(&config_str).expect("Invalid YAML");
 
     let mut builder = native_tls::TlsConnector::builder();
     builder.danger_accept_invalid_certs(true);
@@ -33,34 +40,38 @@ async fn main() {
     let tls_connector = builder.build().expect("Failed to build TLS connector");
     let tls_connector = TokioTlsConnector::from(tls_connector);
     let mut opts = ResolverOpts::default();
-    opts.attempts = 3;              // Retry up to 3 times
-    opts.timeout = std::time::Duration::from_millis(500); // Fast timeout
+    opts.attempts = 2;
+    opts.timeout = std::time::Duration::from_millis(100);
+    opts.cache_size = 1024;
 
-    let name_servers = NameServerConfigGroup::from_ips_clear(
-        &[std::net::IpAddr::V4(dns_host.parse().unwrap())],
-        53,
-        true,
-    );
+    let mut name_servers = NameServerConfigGroup::new();
 
+    for host in dns_host_vec {
+        let ip: IpAddr = host.parse().expect("Invalid DNS host");
+        let config = NameServerConfig {
+            socket_addr: (ip, 53).into(),
+            protocol: Protocol::Tcp, // TCP is more reliable then UDP for DNS queries
+            tls_dns_name: None,
+            trust_negative_responses: false,
+            bind_addr: None,
+        };
+        name_servers.push(config);
+    }
     let resolver_config = ResolverConfig::from_parts(None, vec![], name_servers);
 
     let resolver = TokioAsyncResolver::tokio(resolver_config, opts);
-    
-    let max_org_width = config
-        .keys()
-        .map(|org| org.len())
-        .max()
-        .unwrap_or(10); // fallback to 10 if empty
 
+    let max_org_width = config.keys().map(|org| org.len()).max().unwrap_or(10); // fallback to 10 if empty
 
-    let mimir_endpoint = std::env::var("MIMIR_ENDPOINT").unwrap_or_else(|_| "http://localhost:9009".to_string());
+    let mimir_endpoint =
+        std::env::var("MIMIR_ENDPOINT").unwrap_or_else(|_| "http://localhost:9009".to_string());
     println!("Using Mimir endpoint: {}", mimir_endpoint);
 
     for (key, org_config) in config {
         let tls_connector = TokioTlsConnector::from(tls_connector.clone());
         let resolver = resolver.clone();
         let targets = org_config.targets.clone();
-        let interval = org_config.polling_interval_seconds; 
+        let interval = org_config.polling_interval_seconds;
         let mimir_target = mimir_endpoint.clone();
 
         tokio::spawn(async move {
@@ -116,12 +127,9 @@ async fn main() {
                                 }
 
                                 let metrics = create_probe_metrics(&result, is_accepted);
-                                if let Err(e) = send_to_mimir(
-                                    &mimir_target,
-                                    Some(&organisation_id),
-                                    metrics,
-                                )
-                                .await
+                                if let Err(e) =
+                                    send_to_mimir(&mimir_target, Some(&organisation_id), metrics)
+                                        .await
                                 {
                                     println!(
                                         "[{tenant_name}] Failed to send metrics for {url}: {e}"
