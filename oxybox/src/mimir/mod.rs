@@ -22,8 +22,8 @@ const PROBE_HTTP_VERSION_METRIC: &str = "probe_http_version";
 // const PROBE_TOTAL_DURATION_METRIC: &str = "probe_total_duration_seconds";
 const PROBE_HTTP_SSL_EARLIEST_EXPIERY_METRIC: &str = "probe_ssl_earliest_cert_expiry";
 
-const BLACKBOX_JOB: &str = "oxybox";
-const HTTP_MODULE: &str = "http_probe";
+const BLACKBOX_JOB: &str = "blackbox";
+const HTTP_MODULE: &str = "oxybox_http";
 
 fn create_time_series(
     metric_name: &str,
