@@ -47,6 +47,7 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
           registry: registry-1.docker.io
+          repository: baseflow/oxybox
           push: ${{ github.event_name != 'pull_request' }}
           vulnerability_scan: ${{ github.event_name != 'pull_request' }}
           version: ${{ steps.get_version.outputs.version }}
@@ -59,6 +60,7 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
           registry: registry-1.docker.io
           push: ${{ github.event_name != 'pull_request' }}
+          repository: baseflow/oxybox
           vulnerability_scan: ${{ github.event_name != 'pull_request' }}
           version: ${{ steps.get_version.outputs.version }}
           tag: latest
