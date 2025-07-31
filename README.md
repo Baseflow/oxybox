@@ -6,6 +6,10 @@ specifically for multi-tenant environments. It streamlines endpoint monitoring
 by directly integrating with Mimir, eliminating the overhead associated with
 traditional Blackbox Exporter deployments.
 
+Oxybox is compatible with the [Prometheus Blackbox Exporter Dashboard](https://grafana.com/grafana/dashboards/7587-prometheus-blackbox-exporter/)
+and can be used as a drop in replacement for the Blackbox exporter and Prometheus
+![img](./img/screenshot.png)
+
 ## Why Baseflow Oxybox? The Challenges of Multi-Tenant Monitoring
 
 In multi-tenant setups, leveraging `organisationId` for monitoring presents
@@ -42,3 +46,54 @@ Baseflow Oxybox addresses these challenges by offering a streamlined approach:
 Oxybox aims to provide a leaner, more direct, and ultimately more reliable
 solution for endpoint health checks in complex, multi-tenant infrastructures.
 
+## 🔧 Configuration Overview
+
+Oxybox supports two layers of configuration:
+
+1. **Application Configuration** – Controlled via environment variables.
+2. **Probe Configuration** – Defined in a YAML file to specify target endpoints per organization.
+
+---
+
+### 📝 Probe Configuration (YAML)
+
+The probe configuration file defines how Oxybox should monitor endpoints per organization. Below is an example configuration:
+
+```yaml
+demo:
+  organisation_id: demo
+  polling_interval_seconds: 10
+  targets:
+    - url: https://www.google.com
+    - url: https://www.github.com
+      accepted_status_codes: [200, 301]
+    - url: https://grafana.com/
+
+organisationX:
+  organisation_id: another-org
+  polling_interval_seconds: 20
+  targets:
+    - url: http://www.example.com
+```
+
+Each top-level key (e.g., `demo`, `organisationX`) represents a distinct probe group. The configuration allows you to define:
+
+* `organisation_id`: Logical identifier for the organization.
+* `polling_interval_seconds`: Interval between health checks (in seconds).
+* `targets`: List of endpoints to monitor.
+  * `url`: The target URL.
+  * `accepted_status_codes` (optional): A list of HTTP status codes considered successful.
+
+---
+
+### 🌍 Application Configuration (Environment Variables)
+
+The following environment variables can be used to configure Oxybox’s runtime behavior:
+
+| Name             | Example Value                                  | Default Value           |
+| ---------------- | ---------------------------------------------- | ----------------------- |
+| `CONFIG_FILE`    | `example-config.yml`                           | `config.yml`            |
+| `DNS_HOSTS`      | `8.8.8.8, 1.1.1.1`                             | `1.1.1.1, 8.8.8.8`      |
+| `MIMIR_ENDPOINT` | `http://mimir.grafana.svc.cluster.local:9090/` | `http://localhost:9009` |
+
+These can be defined in a `.env` file or passed directly through your environment.
