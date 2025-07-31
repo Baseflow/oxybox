@@ -1,6 +1,15 @@
 [package]
 name = "oxybox"
 version = "1.11.0"
+authors - ["Thomas Luijken"]
+categories = ["command-line-utilities"]
+description = "A drop in replacement for blackbox exporter for Prometheus, with support for TLS and HTTP/3."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/baseflow/oxybox"
+homepage = "https://baseflow.com"
+keywords = ["prometheus", "exporter", "blackbox", "http", "https", "tls", "http3"]
+readme = "README.md"
+rust-version = "1.70"
 edition = "2024"
 
 [dependencies]
