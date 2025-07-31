@@ -1,6 +1,7 @@
 use std::io::Result;
 use std::path::PathBuf;
 
+/// This build script compiles Protocol Buffers (protobuf) files into Rust code using `prost-build`.
 fn main() -> Result<()> {
     let proto_roots = ["protos", "protos/prometheus/prompb"];
 

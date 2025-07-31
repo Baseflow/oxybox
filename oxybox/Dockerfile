@@ -1,4 +1,8 @@
+# Dockerfile for building the Oxybox application using Rust and musl
 FROM clux/muslrust
+
+# Set the environment variables for the build
+# We're using the reqwest unstable feature HTTP3
 ENV RUSTFLAGS='--cfg reqwest_unstable'
 RUN mkdir /source
 WORKDIR /source
