@@ -5,12 +5,10 @@ demo:
     - url: https://www.google.com
     - url: https://www.github.com
       accepted_status_codes: [200, 301]
-    - url: https://www.kloosterdolphia.nl
-    - url: https://expired.badssl.com
-      accepted_status_codes: [200, 495, 526]
+    - url: https://grafana.com/
 
 organisationX:
-  organisation_id: 1
+  organisation_id: another-org
   polling_interval_seconds: 20
   targets:
     - url: http://www.example.com

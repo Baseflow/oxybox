@@ -1,5 +1,7 @@
 use std::{net::IpAddr, time::Duration};
+use std::env;
 
+use dotenvy::dotenv;
 use tokio_native_tls::TlsConnector as TokioTlsConnector;
 use trust_dns_resolver::{
     TokioAsyncResolver,
@@ -20,14 +22,17 @@ pub struct AppConfig {
 /// parses it into a `Config` struct, and overrides certain values with environment variables.
 /// It also sets up the DNS hosts and Mimir endpoint.
 pub fn load_config() -> AppConfig {
+
+    dotenv().ok();
+
     let config_file_location =
-        std::env::var("CONFIG_FILE").unwrap_or_else(|_| "config.yml".to_string());
+        env::var("CONFIG_FILE").unwrap_or_else(|_| "config.yml".to_string());
     let config_str = std::fs::read_to_string(&config_file_location)
         .expect("Failed to read config.yaml");
 
     let config: Config = serde_yaml::from_str(&config_str).expect("Invalid YAML");
 
-    let dns_hosts = std::env::var("DNS_HOSTS")
+    let dns_hosts = env::var("DNS_HOSTS")
         .unwrap_or_else(|_| "1.1.1.1,8.8.8.8".to_string())
         .split(',')
         .map(|s| s.trim().to_string())
@@ -36,7 +41,7 @@ pub fn load_config() -> AppConfig {
     println!("Using DNS hosts: {:?}", dns_hosts);
 
     let mimir_endpoint =
-        std::env::var("MIMIR_ENDPOINT").unwrap_or_else(|_| "http://localhost:9009".to_string());
+        env::var("MIMIR_ENDPOINT").unwrap_or_else(|_| "http://localhost:9009".to_string());
 
     let max_org_width = config.keys().map(|org| org.len()).max().unwrap_or(10);
 
