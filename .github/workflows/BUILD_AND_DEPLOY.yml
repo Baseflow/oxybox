@@ -46,7 +46,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
-          registry: hub.docker.io
+          registry: registry-1.docker.io
           push: ${{ github.event_name != 'pull_request' }}
           vulnerability_scan: ${{ github.event_name != 'pull_request' }}
           version: ${{ steps.get_version.outputs.version }}
@@ -57,7 +57,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
-          registry: hub.docker.io
+          registry: registry-1.docker.io
           push: ${{ github.event_name != 'pull_request' }}
           vulnerability_scan: ${{ github.event_name != 'pull_request' }}
           version: ${{ steps.get_version.outputs.version }}
