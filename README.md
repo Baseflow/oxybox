@@ -1,4 +1,8 @@
 # Baseflow Oxybox: A Lean Multi-Tenant Monitoring Solution
+---
+[![Build docker container image](https://github.com/Baseflow/oxybox/actions/workflows/BUILD_AND_DEPLOY.yml/badge.svg)](https://github.com/Baseflow/oxybox/actions/workflows/BUILD_AND_DEPLOY.yml)
+[![Docker Pulls](https://img.shields.io/docker/pulls/baseflow/oxybox.svg?maxAge=604800)](https://hub.docker.com/r/baseflow/oxybox/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 Baseflow Oxybox is a lightweight and simplified alternative to the [Prometheus
 Blackbox Exporter](https://github.com/prometheus/blackbox_exporter), designed
