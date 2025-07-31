@@ -26,6 +26,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         name: Checkout
+      - name: Get project version from Cargo.toml
+        id: get_version
+        run: |
+          version=$(grep '^version' oxybox/Cargo.toml | head -n 1 | cut -d '"' -f2)
+          echo "version=$version" >> $GITHUB_OUTPUT
       - uses: Baseflow/github-actions/docker@main
         name: Build docker image
         with:
@@ -33,5 +38,5 @@ jobs:
           password: ${{ secrets.BASEFLOW_ACR_PASSWORD }}
           push: ${{ github.event_name != 'pull_request' }}
           vulnerability_scan: ${{ github.event_name != 'pull_request' }}
-          version: "1.10"
+          version: ${{ steps.get_version.outputs.version }}
           context: ./oxybox
