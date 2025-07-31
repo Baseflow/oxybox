@@ -10,41 +10,64 @@ Oxybox is compatible with the [Prometheus Blackbox Exporter Dashboard](https://g
 and can be used as a drop in replacement for the Blackbox exporter and Prometheus
 ![img](./img/screenshot.png)
 
-## Why Baseflow Oxybox? The Challenges of Multi-Tenant Monitoring
+---
 
-In multi-tenant setups, leveraging `organisationId` for monitoring presents
-significant complexities with the Prometheus Blackbox Exporter. The conventional
-approach often necessitates:
+## ❓ Why Baseflow Oxybox? The Challenges of Multi-Tenant Monitoring
 
-* **Multiple Prometheus Helm Chart Installations:** Each tenant typically
-  requires its own Prometheus instance, leading to a proliferation of
-  deployments within the cluster.
-* **Bulky Integration with Grafana:** The Blackbox Exporter's reliance on
-  Prometheus as an intermediary creates an overly complex data flow for
-  visualization in Grafana.
-* **Unnecessary Intermediary:** When Mimir is already in place as the central
-  metrics store, routing monitoring data through Prometheus adds an redundant
-  layer. Prometheus's role in this scenario is limited to calling Blackbox
-  Exporter and then forwarding the results to Mimir.
+In multi-tenant setups, leveraging `organisationId` for monitoring introduces significant complexities when using Prometheus Blackbox Exporter. Traditional setups often require:
 
-This multi-layered architecture often results in an excessive number of
-processes, contributing to increased operational burden and potential stability
-issues within the cluster.
+* 📦 **Multiple Prometheus Helm Chart Installations**
+  Each tenant typically requires its own Prometheus instance, resulting in a proliferation of deployments within the cluster.
 
-## Our Solution: Direct, Multi-Tenant Monitoring with Oxybox
+* 🧩 **Bulky Integration with Grafana**
+  Blackbox Exporter's reliance on Prometheus as a middleman introduces complexity in the data pipeline between exporters and Grafana.
 
-Baseflow Oxybox addresses these challenges by offering a streamlined approach:
+* 🔁 **Unnecessary Intermediary**
+  If Grafana Mimir is already used as the centralized metrics backend, inserting Prometheus solely to invoke the Blackbox Exporter becomes redundant. Prometheus ends up being just a relay.
 
-* **Single Container Efficiency:** A single Oxybox container can monitor all
-  configured endpoints across multiple tenants.
-* **Direct Mimir Integration:** Oxybox directly sends monitoring metrics to
-  Mimir, complete with multi-tenancy enabled through `organisationId` tagging.
-* **Reduced Operational Overhead:** By removing Prometheus as an intermediary,
-  Oxybox significantly simplifies the monitoring stack, leading to fewer
-  deployed components and a more robust, efficient system.
+This layered architecture increases operational overhead and can negatively impact performance and cluster stability.
 
-Oxybox aims to provide a leaner, more direct, and ultimately more reliable
-solution for endpoint health checks in complex, multi-tenant infrastructures.
+---
+
+## 🚀 Our Solution: Direct, Multi-Tenant Monitoring with Oxybox
+
+**Baseflow Oxybox** solves these issues with a focused, streamlined design:
+
+* 🧱 **Single Container Efficiency**
+  A single Oxybox instance can monitor all endpoints across tenants with minimal resource usage.
+
+* 🎯 **Direct Mimir Integration**
+  Metrics are sent directly to Mimir with multi-tenancy enforced via `organisationId` tagging—no Prometheus required.
+
+* ⚙️ **Reduced Operational Overhead**
+  By eliminating Prometheus from the monitoring path, Oxybox reduces system complexity, improving reliability and maintainability.
+
+> Oxybox is built to deliver a simpler, more resilient, and tenant-aware health check system for modern, multi-tenant infrastructure.
+
+### 🐳 Running Oxybox via Docker
+
+You can run Oxybox directly using the official Docker image published on Docker Hub:
+
+```sh
+docker run --rm \
+  -v $(pwd)/example-config.yml:/app/config.yml \
+  -e CONFIG_FILE=config.yml \
+  -e DNS_HOSTS=8.8.8.8,1.1.1.1 \
+  -e MIMIR_ENDPOINT=http://localhost:9009 \
+  baseflow/oxybox:latest
+```
+
+### 📦 Notes:
+
+* `-v $(pwd)/example-config.yml:/app/config.yml` mounts your local probe configuration into the container.
+* Environment variables like `CONFIG_FILE`, `DNS_HOSTS`, and `MIMIR_ENDPOINT` are used to control runtime behavior.
+* Replace `latest` with a specific version tag if you want to pin to a stable release.
+* The working directory inside the container is `/app`.
+
+You can find the image and tags here:
+👉 [baseflow/oxybox on Docker Hub](https://hub.docker.com/r/baseflow/oxybox)
+
+---
 
 ## 🔧 Configuration Overview
 
