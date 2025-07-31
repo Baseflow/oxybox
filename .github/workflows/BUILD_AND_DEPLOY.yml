@@ -40,3 +40,26 @@ jobs:
           vulnerability_scan: ${{ github.event_name != 'pull_request' }}
           version: ${{ steps.get_version.outputs.version }}
           context: ./oxybox
+      - uses: Baseflow/github-actions/docker@main
+        if: github.ref == 'refs/heads/main'
+        name: Build docker image to docker hub
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+          registry: hub.docker.io
+          push: ${{ github.event_name != 'pull_request' }}
+          vulnerability_scan: ${{ github.event_name != 'pull_request' }}
+          version: ${{ steps.get_version.outputs.version }}
+          context: ./oxybox
+      - uses: Baseflow/github-actions/docker@main
+        if: github.ref == 'refs/heads/main'
+        name: Build docker image to docker hub
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+          registry: hub.docker.io
+          push: ${{ github.event_name != 'pull_request' }}
+          vulnerability_scan: ${{ github.event_name != 'pull_request' }}
+          version: ${{ steps.get_version.outputs.version }}
+          tag: latest
+          context: ./oxybox
