@@ -1,5 +1,7 @@
 use client::prometheus::prompb;
 
+use crate::http_probe::result::ProbeResult;
+
 pub mod client;
 
 const INSTANCE_LABEL: &str = "instance";
@@ -13,13 +15,6 @@ const PROBE_HTTP_DURATION_METRIC: &str = "probe_http_duration_seconds";
 const PROBE_DNS_LOOKUP_TIME_METRIC: &str = "probe_dns_lookup_time_seconds";
 const PROBE_HTTP_SSL_ENABLED_METRIC: &str = "probe_http_ssl";
 const PROBE_HTTP_VERSION_METRIC: &str = "probe_http_version";
-
-// const PROBE_TLS_VERSION_METRIC: &str = "probe_tls_version_info";
-// const PROBE_CONNECT_TIME_METRIC: &str = "probe_connect_time_seconds";
-// const PROBE_TLS_HANDSHAKE_TIME_METRIC: &str = "probe_tls_handshake_time_seconds";
-// const PROBE_REQUEST_DURATION_METRIC: &str = "probe_request_duration_seconds";
-// const PROBE_RESPONSE_DURATION_METRIC: &str = "probe_response_duration_seconds";
-// const PROBE_TOTAL_DURATION_METRIC: &str = "probe_total_duration_seconds";
 const PROBE_HTTP_SSL_EARLIEST_EXPIERY_METRIC: &str = "probe_ssl_earliest_cert_expiry";
 
 const BLACKBOX_JOB: &str = "oxybox";
@@ -31,7 +26,6 @@ fn create_time_series(
     value: f64,
     additional_labels: Option<Vec<(&str, &str)>>,
 ) -> prompb::TimeSeries {
-    // combine the mandatory labels with any additional labels
     let mut labels: Vec<(&str, &str)> = vec![
         (INSTANCE_LABEL, instance),
         (JOB_LABEL, BLACKBOX_JOB),
@@ -45,8 +39,24 @@ fn create_time_series(
     client::create_time_series(metric_name, &labels, value, None)
 }
 
+/// Creates a vector of TimeSeries metrics for the given probe result.
+/// The metrics include:
+///    - `probe_success`: Indicates if the probe was successful (1.0 for success, 0.0 for failure).
+///    - `probe_duration_seconds`: Total time taken for the probe.
+///    - `probe_http_status_code`: HTTP status code received from the probe.
+///    - `probe_http_duration_seconds`: Duration of various phases of the HTTP probe (resolve, connect, tls, processing, transfer).
+///    - `probe_dns_lookup_time_seconds`: Time taken for DNS lookup.
+///    - `probe_http_ssl`: Indicates if SSL was enabled (1.0 for enabled, 0.0 for not).
+///    - `probe_ssl_earliest_cert_expiry`: Earliest expiry time of the SSL certificate in seconds.
+///    - `probe_http_version`: HTTP version used for the probe (e.g., 1.0, 1.1, 2.0, 3.0).
+/// ## Arguments:
+///     - `probe_result`: A reference to the `ProbeResult` struct containing the results of the probe.
+///     - `probe_success`: A boolean indicating whether the probe was successful or not.
+/// ## Returns:
+///     A vector of `prompb::TimeSeries` metrics representing the probe results, which can be sent
+///     to a Prometheus-compatible monitoring system.
 pub fn create_probe_metrics(
-    probe_result: &crate::ProbeResult,
+    probe_result: &ProbeResult,
     probe_success: bool,
 ) -> Vec<prompb::TimeSeries> {
     let mut metrics = Vec::new();
@@ -62,46 +72,24 @@ pub fn create_probe_metrics(
         None,
     ));
 
-    if let Some(dns_time) = probe_result.dns_time {
-        metrics.push(create_time_series(
-            PROBE_HTTP_DURATION_METRIC,
-            &probe_result.url,
-            dns_time,
-            Some(vec![("phase", "resolve")]),
-        ));
-    };
-    if let Some(connect_time) = probe_result.connect_time {
-        metrics.push(create_time_series(
-            PROBE_HTTP_DURATION_METRIC,
-            &probe_result.url,
-            connect_time,
-            Some(vec![("phase", "connect")]),
-        ));
-    };
-    if let Some(tls_time) = probe_result.tls_time {
-        metrics.push(create_time_series(
-            PROBE_HTTP_DURATION_METRIC,
-            &probe_result.url,
-            tls_time,
-            Some(vec![("phase", "tls")]),
-        ));
-    };
-    if let Some(processing_time) = probe_result.processing_time {
-        metrics.push(create_time_series(
-            PROBE_HTTP_DURATION_METRIC,
-            &probe_result.url,
-            processing_time,
-            Some(vec![("phase", "processing")]),
-        ));
-    };
-    if let Some(transfer_time) = probe_result.transfer_time {
-        metrics.push(create_time_series(
-            PROBE_HTTP_DURATION_METRIC,
-            &probe_result.url,
-            transfer_time,
-            Some(vec![("phase", "transfer")]),
-        ));
-    };
+    let phases = [
+        (probe_result.dns_time, "resolve"),
+        (probe_result.connect_time, "connect"),
+        (probe_result.tls_time, "tls"),
+        (probe_result.processing_time, "processing"),
+        (probe_result.transfer_time, "transfer"),
+    ];
+
+    for (duration_opt, phase) in phases.iter() {
+        if let Some(duration) = duration_opt {
+            metrics.push(create_time_series(
+                PROBE_HTTP_DURATION_METRIC,
+                &probe_result.url,
+                *duration,
+                Some(vec![("phase", *phase)]),
+            ));
+        }
+    }
 
     metrics.push(create_time_series(
         PROBE_DURATION_METRIC,
@@ -127,11 +115,11 @@ pub fn create_probe_metrics(
         ));
     }
 
-    let ssl_enabled = if probe_result.cert_validity_seconds.is_some() {
-        1.0
-    } else {
-        0.0
+    let ssl_enabled = match probe_result.cert_validity_seconds {
+        Some(_) => 1.0,
+        None => 0.0,
     };
+
     metrics.push(create_time_series(
         PROBE_HTTP_SSL_ENABLED_METRIC,
         &probe_result.url,

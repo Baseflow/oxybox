@@ -10,6 +10,7 @@ use reqwest::{
     Client,
     header::{CONTENT_ENCODING, CONTENT_TYPE, HeaderMap, HeaderValue},
 };
+
 use snap::raw::Encoder;
 
 /// Sends Prometheus metrics to a Mimir remote write endpoint.
@@ -71,7 +72,15 @@ pub async fn send_to_mimir(
     Ok(())
 }
 
-/// Helper function to create a single TimeSeries.
+/// Creates a `TimeSeries` metric with the given metric name, labels, value, and optional timestamp.
+/// This function is useful for constructing metrics that can be sent to Mimir or Prometheus.
+/// # Arguments
+///     * `metric_name` - The name of the metric (e.g., "my_app_http_requests_total").
+///     * `labels` - A slice of tuples representing labels for the metric (e.g., &[("method", "GET"), ("status", "200")]).
+///     * `value` - The value of the metric (e.g., 1.0 for a counter increment).
+///     * `timestamp_ms` - An optional timestamp in milliseconds. If not provided, the current time will be used.
+/// # Returns
+///     A `TimeSeries` struct containing the metric data, which can be sent to Mimir or Prometheus.
 pub fn create_time_series(
     metric_name: &str,
     labels: &[(&str, &str)],
@@ -79,12 +88,13 @@ pub fn create_time_series(
     timestamp_ms: Option<i64>,
 ) -> TimeSeries {
     let mut all_labels = Vec::new();
-    // Add the mandatory metric name label
+    // Add the default metric name label
     all_labels.push(Label {
         name: "__name__".to_string(),
         value: metric_name.to_string(),
     });
-    // Add custom labels
+
+    // Add additional labels
     for (name, val) in labels {
         all_labels.push(Label {
             name: name.to_string(),
@@ -92,6 +102,7 @@ pub fn create_time_series(
         });
     }
 
+    // Create a sample with the provided value and timestamp
     let sample = Sample {
         value,
         timestamp: timestamp_ms.unwrap_or_else(|| Utc::now().timestamp_millis()),
@@ -100,17 +111,16 @@ pub fn create_time_series(
     TimeSeries {
         labels: all_labels,
         samples: vec![sample],
-        exemplars: vec![],  // For tracing, leave empty if not used
-        histograms: vec![], // For native histograms, leave empty if not used
+        exemplars: vec![],
+        histograms: vec![],
     }
 }
 
-// Example usage in a main function or test
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[tokio::test]
+
     async fn test_create_and_send_metrics() {
         // NOTE: This test will attempt to send data to a live Mimir instance.
         // Make sure Mimir is running at this address, or comment out for CI.
@@ -149,9 +159,7 @@ mod tests {
             Err(e) => eprintln!("Failed to send test metrics: {}", e),
         }
 
-        // In a real test, you might assert that the call didn't return an error.
-        // For actual data verification, you'd query Mimir after a delay,
-        // which is beyond a simple unit test.
-        assert!(true); // Placeholder, replace with actual assertion if possible
+        assert!(true);
+        
     }
 }

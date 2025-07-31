@@ -1,15 +1,30 @@
 use std::net::SocketAddr;
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use reqwest::Client;
+use tokio::time::sleep;
 use trust_dns_resolver::name_server::GenericConnector;
 use url::Url;
 
 use tokio_native_tls::TlsConnector as TokioTlsConnector;
 use x509_parser::parse_x509_certificate;
 
-use super::prelude::*;
-use trust_dns_resolver::AsyncResolver;
+use crate::config::probe_config::{OrganisationConfig, TargetConfig};
+use crate::mimir::client::send_to_mimir;
+use crate::mimir::create_probe_metrics;
 
+use trust_dns_resolver::{AsyncResolver, TokioAsyncResolver};
+
+use super::result::ProbeResult;
+
+
+/// Struct to hold the results of an HTTP probe.
+/// This struct contains various metrics related to the HTTP request, such as DNS resolution time, connection time, TLS handshake time, HTTP status code, and more.
+/// # Fields
+///     * `url` - The URL that was probed.
+///     * `dns_time` - The time taken for DNS resolution, in seconds.
+///     * `connect_time` - The time taken to establish a TCP connection, in seconds.
+///     * `tls_time` - The time taken to establish a TLS connection, in seconds.
 #[derive(Debug)]
 struct HttpProbeResult {
     dns_time: Option<f64>,
@@ -18,6 +33,10 @@ struct HttpProbeResult {
     tls_time: Option<f64>,
 }
 
+/// Function to get connection timings including DNS resolution, TCP connection, and TLS handshake
+/// Returns a `HttpProbeResult` containing the timings and certificate validity
+/// # Errors
+///     Returns an error string if any step fails, such as DNS resolution failure, TCP connection failure, or TLS handshake failure.
 async fn get_connect_timings(
     host: &str,
     connector: &TokioTlsConnector,
@@ -26,6 +45,8 @@ async fn get_connect_timings(
     >,
     with_tls: bool,
 ) -> Result<HttpProbeResult, String> {
+
+    // step one: DNS resolution
     let dns_start = Instant::now();
     if host.is_empty() {
         return Err("Host is empty".to_string());
@@ -41,6 +62,8 @@ async fn get_connect_timings(
         Err(e) => return Err(format!("DNS resolution failed for host {host}: {e}")),
     };
     let dns_time = Some(dns_start.elapsed().as_secs_f64());
+
+    // step two: TCP connection
     let connect_start = Instant::now();
     let socket_addr = match with_tls {
         // true connect to port 80, otherwise port 443
@@ -52,6 +75,8 @@ async fn get_connect_timings(
         Ok(s) => s,
         Err(e) => return Err(format!("Failed to connect to host {host}: {e}")),
     };
+
+    // step tree: TCP connection established
     let connect_time = Some(connect_start.elapsed().as_secs_f64());
     if !with_tls {
         return Ok(HttpProbeResult {
@@ -61,13 +86,15 @@ async fn get_connect_timings(
             tls_time: None,
         });
     }
-
+    
+    // step four: TLS handshake
     let tls_start = Instant::now();
     let tls_stream = connector.connect(host, stream).await;
     let (tls_time, cert_validity_seconds) = match tls_stream {
         Ok(tls_stream) => {
             let tls_time = Some(tls_start.elapsed().as_secs_f64());
-            // Extract certificate in blocking context
+
+            // step five: Parse the certificate and calculate its validity
             let cert_der = tokio::task::spawn_blocking(move || {
                 let cert = tls_stream.get_ref().peer_certificate().ok().flatten()?;
                 cert.to_der().ok()
@@ -104,6 +131,11 @@ async fn get_connect_timings(
     })
 }
 
+/// Convert reqwest HTTP version to a float representation
+/// # Arguments
+///     * `version` - The HTTP version from reqwest
+/// # Returns
+///     A float representation of the HTTP version (e.g., 1.1 -> 1.1, 2.0 -> 2.0)
 fn convert_http_version(version: reqwest::Version) -> f64 {
     match version {
         reqwest::Version::HTTP_09 => 0.9,
@@ -115,7 +147,17 @@ fn convert_http_version(version: reqwest::Version) -> f64 {
     }
 }
 
-pub async fn probe_url(
+/// Probes a URL to validate its connectivity and performance metrics.
+/// # Arguments
+///     * `client` - An instance of `reqwest::Client` for making HTTP requests.
+///     * `connector` - An instance of `TokioTlsConnector` for establishing TLS connections.
+///     * `resolver` - An instance of `AsyncResolver` for DNS resolution.
+///     * `url` - The URL to probe, which should be a valid HTTP or HTTPS URL.
+/// # Returns
+///     A `Result` containing a `ProbeResult` struct with the probe metrics if successful, or an error message if the probe fails.
+/// # Errors
+///     Returns an error string if the URL parsing fails, DNS resolution fails, connection fails, or HTTP request fails.
+async fn probe_url(
     client: reqwest::Client,
     connector: &TokioTlsConnector,
     resolver: &AsyncResolver<
@@ -123,8 +165,8 @@ pub async fn probe_url(
     >,
     url: &str,
 ) -> Result<ProbeResult, String> {
+
     let probe_start = Instant::now();
-    // Simulate HTTP request and response (replace with actual HTTP client logic)
     let url = url.to_string();
 
     let parsed_url = Url::parse(&url).ok();
@@ -179,4 +221,132 @@ pub async fn probe_url(
         transfer_time,
         total_probe_time,
     })
+}
+
+
+pub async fn run_probe_loop(
+    tenant_name: String,
+    org_config: OrganisationConfig,
+    resolver: TokioAsyncResolver,
+    tls_connector: TokioTlsConnector,
+    mimir_endpoint: String,
+    max_org_width: usize,
+) {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(5))
+        .danger_accept_invalid_certs(true)
+        .user_agent("reqwest-h2-h3-probe/1.0")
+        .build()
+        .expect("Failed to create client");
+
+    loop {
+        let mut handles = vec![];
+
+        for target in &org_config.targets {
+            let client = client.clone();
+            let connector = tls_connector.clone();
+            let resolver = resolver.clone();
+            let target = target.clone();
+            let tenant_name = tenant_name.clone();
+            let org_id = org_config.organisation_id.clone();
+            let mimir_endpoint = mimir_endpoint.clone();
+
+            handles.push(tokio::spawn(async move {
+                handle_target_probe(
+                    tenant_name,
+                    &org_id,
+                    &target,
+                    &client,
+                    &connector,
+                    &resolver,
+                    &mimir_endpoint,
+                    max_org_width,
+                )
+                .await;
+            }));
+        }
+
+        for handle in handles {
+            let _ = handle.await;
+        }
+
+        sleep(Duration::from_secs(org_config.polling_interval_seconds)).await;
+    }
+}
+
+/// Formats a string to a fixed width, truncating if necessary
+/// # Arguments
+///     * `input` - The input string to format.
+///     * `width` - The desired width of the output string.
+fn to_fixed_width(input: &str, width: usize) -> String {
+    use unicode_truncate::UnicodeTruncateStr;
+
+    let (truncated, _) = input.unicode_truncate(width);
+    format!("{:<width$}", truncated, width = width)
+}
+
+
+/// Handles probing a target URL and sending the results to Mimir.
+/// # Arguments
+///     * `tenant` - The tenant name for logging and metrics.
+///     * `org_id` - The organisation ID for Mimir metrics.
+///     * `target` - The target configuration containing the URL and accepted status codes.
+///     * `client` - The HTTP client used for making requests.
+///     * `tls_connector` - The TLS connector for establishing secure connections.
+///     * `resolver` - The DNS resolver for resolving hostnames.
+///     * `mimir_target` - The Mimir endpoint to send metrics to.
+///     * `max_width` - The maximum width for tenant name formatting in logs.
+async fn handle_target_probe(
+    tenant: String,
+    org_id: &str,
+    target: &TargetConfig,
+    client: &Client,
+    tls_connector: &TokioTlsConnector,
+    resolver: &TokioAsyncResolver,
+    mimir_target: &str,
+    max_width: usize,
+) {
+    let url = &target.url;
+    let result = probe_url(client.clone(), tls_connector, resolver, url).await;
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs_f64();
+    let padded_tenant = to_fixed_width(&tenant, max_width);
+
+    match result {
+        Ok(probe) => {
+            let accepted = probe
+                .http_status
+                .map(|code| target.accepted_status_codes.contains(&code))
+                .unwrap_or(false);
+
+            if accepted {
+                println!(
+                    "[{padded_tenant}] ✅ URL: {}, Status: {:?}, Elapsed: {:.2}ms, Cert: {}",
+                    url,
+                    probe.http_status,
+                    probe.total_probe_time * 1000.0,
+                    probe
+                        .cert_validity_seconds
+                        .map(|d| format!("{:.2}d", (d - now) / 86400.0))
+                        .unwrap_or_else(|| "N/A".to_string())
+                );
+            } else {
+                println!(
+                    "[{padded_tenant}] ❌ Unexpected status for {url}: {:?} (accepted: {:?})",
+                    probe.http_status, target.accepted_status_codes
+                );
+            }
+
+            let metrics = create_probe_metrics(&probe, accepted);
+            if let Err(e) = send_to_mimir(mimir_target, Some(org_id), metrics).await {
+                println!("[{padded_tenant}] Failed to send metrics for {url}: {e}");
+            }
+        }
+        Err(e) => {
+            println!("[{padded_tenant}] ❌ Probe error for {url}: {e}");
+        }
+    }
 }
