@@ -22,7 +22,8 @@ jobs:
   # will only scan for vulnerabilities and push to acr on push events
   docker-build:
     name: Build docker image
-    runs-on: baseflow-runner
+    # runs-on: baseflow-runner
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         name: Checkout
