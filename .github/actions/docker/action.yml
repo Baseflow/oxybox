@@ -1,0 +1,149 @@
+description: 'Build custom docker images'
+name: 'docker'
+
+inputs:
+  build:
+    description: Whether to builds docker image
+    default: "true"
+  vulnerability_scan:
+    description: Whether to scan docker image for vulnerabilities
+    default: "false"
+  dockerfile: 
+    description: Defaults to the first Dockerfile found 
+    required: false
+  context: 
+    description: Defaults to repoistory root
+    required: false
+    default: .
+  push: 
+    description: Push image to the container registry
+    required: false
+    default: 'true'
+  repository:
+    description: Image name excluding container registry
+    required: false
+  version:
+    description: The version to use in case of a master/main branch build
+    required: false
+  buildArgs:
+    description: docker extra build arguments
+    required: false
+  username:
+    description: docker container registry username
+    required: true
+  password:
+    description: docker container registry password
+    required: true
+  tag:
+    description: The tag to assign to this container image
+    required: false
+  registry:
+    description: The container registry to push to (defaults to baseflow.azurecr.io)
+    required: false
+    default: baseflow.azurecr.io
+
+outputs:
+  image:
+    description: "Built container image name"
+    value: ${{ steps.build.outputs.image }}
+ 
+runs:
+  using: "composite"
+  steps:
+    - name: Acquire context information
+      shell: bash
+      id: info
+      env:
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        REGISTRY: ${{ inputs.registry }}
+        IMAGE: ${{ inputs.repository }}
+        TAG: ${{ inputs.tag }}
+      run: |
+        COMMIT=${GITHUB_SHA::7}
+        BRANCH=${GITHUB_REF_NAME/\//-}
+        DOCKERFILE=$(find ${DOCKERFILE:--iname Dockerfile*} -print -quit) 
+        IMAGE_NAME=$(echo "${IMAGE:-${GITHUB_REPOSITORY##*/}}" | sed "s/$REGISTRY\///i")
+        echo "image=${REGISTRY}/${IMAGE_NAME}" >> $GITHUB_OUTPUT
+        echo "dockerfile=$DOCKERFILE" >> $GITHUB_OUTPUT  
+        echo "registry=$REGISTRY" >> $GITHUB_OUTPUT  
+
+    - name: Authenticate to Container registry
+      shell: bash
+      id: login
+      env:
+        REGISTRY: ${{steps.info.outputs.registry}}
+      run: |
+        docker login ${REGISTRY} \
+          --username ${{inputs.username}} \
+          --password ${{inputs.password}}
+
+    - name: determine tag
+      shell: bash
+      id: determine-tag
+      env:
+        INPUT_TAG: ${{ inputs.tag }}
+        VERSION: ${{ inputs.version }}
+        IMAGE_NAME: ${{ steps.info.outputs.image}}
+      run: |
+        BRANCH_NAME="${GITHUB_REF##*/}"
+        DATE=$(date +%y%m%d%H%M)
+        
+        echo "Branch name: $BRANCH_NAME"
+        echo "Release version: $VERSION"
+
+        if [[ $INPUT_TAG != '' ]]; then
+          TAG="${IMAGE_NAME}:${INPUT_TAG}"
+        elif [[ "$BRANCH_NAME" == "main" ]]; then
+          if [[ $VERSION == '' ]]; then
+              printf '%s\n' "Test case x failed" >&2
+              exit 1
+          fi
+          TAG="${IMAGE_NAME}:${VERSION}"
+        elif [[ "$BRANCH_NAME" == "develop" ]] || [[ "$BRANCH_NAME" == release-* ]] || [[ "$BRANCH_NAME" == hotfix-* ]]; then
+          TAG="${IMAGE_NAME}:${BRANCH_NAME}-${DATE}"
+        else
+          TAG="${IMAGE_NAME}:${BRANCH_NAME}"
+        fi
+
+        echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+    - name: Docker build image
+      if: inputs.build == 'true'
+      shell: bash
+      id: build
+      env:
+        DOCKERFILE: ${{ steps.info.outputs.dockerfile }}
+        TAG: ${{ steps.determine-tag.outputs.tag }}
+        ARGS: ${{ inputs.buildArgs }}
+        CONTEXT: ${{ inputs.context }}
+      run: |
+        docker buildx build \
+          --no-cache \
+          --label time=$(date +%Y%m%d%H%M%S) \
+          --label branch=${GITHUB_REF_NAME} \
+          --label commit=${{ github.sha }} \
+          --file ${DOCKERFILE} \
+          --build-arg "BRANCH=${{ github.ref_name }}" \
+          --build-arg "COMMIT=${{ github.sha }}" \
+          --tag ${TAG} \
+          ${ARGS} \
+          ${CONTEXT}
+    
+    - uses: aquasecurity/trivy-action@master
+      name: Vulnerability Scan
+      if: inputs.build == 'true' && inputs.vulnerability_scan == 'true'
+      with:
+        image-ref: ${{ steps.determine-tag.outputs.tag }}
+        scanners: vuln #,config,secret
+        severity: 'CRITICAL,HIGH'
+        vuln-type: 'os,library'
+        ignore-unfixed: true
+        exit-code: '1'
+        format: 'table'
+    - name: Push docker image
+      if: inputs.build == 'true' && inputs.push == 'true'
+      shell: bash
+      env:
+        IMAGE: ${{ steps.info.outputs.image }}
+      run: |
+        docker push ${IMAGE} --all-tags 
