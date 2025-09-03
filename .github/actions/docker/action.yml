@@ -73,9 +73,9 @@ runs:
       env:
         REGISTRY: ${{steps.info.outputs.registry}}
       run: |
-        echo "${{ inputs.password }}" | docker login "${REGISTRY}" \
-          --username "${{ inputs.username }}" \
-          --password-stdin
+        echo "${{ inputs.password }}" | docker login "${REGISTRY}"
+        --username "${{ inputs.username }}"
+        --password-stdin
 
     - name: determine tag
       shell: bash
