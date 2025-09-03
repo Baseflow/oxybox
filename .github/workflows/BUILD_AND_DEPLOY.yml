@@ -56,7 +56,7 @@ jobs:
             --build-arg "BRANCH=${{ github.ref_name }}" \
             --build-arg "COMMIT=${{ github.sha }}" \
             --tag baseflow/oxybox:latest \
-            --tag baseflow/oxybox:${VERSION}
+            --tag baseflow/oxybox:${VERSION} \
             ${CONTEXT}
       
       - uses: aquasecurity/trivy-action@master
