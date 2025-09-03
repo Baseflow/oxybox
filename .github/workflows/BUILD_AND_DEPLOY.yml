@@ -17,6 +17,10 @@ on:
       - 'oxybox/src/**'
       - '.github/workflows/BUILD_AND_DEPLOY.yml'
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   # validate that the docker image is built.
   # will only scan for vulnerabilities and push to acr on push events
