@@ -28,19 +28,9 @@ inputs:
   buildArgs:
     description: docker extra build arguments
     required: false
-  username:
-    description: docker container registry username
-    required: true
-  password:
-    description: docker container registry password
-    required: true
   tag:
     description: The tag to assign to this container image
     required: false
-  registry:
-    description: The container registry to push to (defaults to baseflow.azurecr.io)
-    required: false
-    default: baseflow.azurecr.io
 
 outputs:
   image:
@@ -70,9 +60,9 @@ runs:
     - name: Login to Docker Hub
       uses: docker/login-action@v3
       with:
-        registry: ${{steps.info.outputs.registry}}
-        username: ${{inputs.username}}
-        password: ${{inputs.password}}
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+        registry: registry-1.docker.io
 
     - name: determine tag
       shell: bash

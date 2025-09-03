@@ -33,21 +33,9 @@ jobs:
           version=$(grep '^version' oxybox/Cargo.toml | head -n 1 | cut -d '"' -f2)
           echo "version=$version" >> $GITHUB_OUTPUT
       - uses: ./.github/actions/docker
-        name: Build docker image
-        with:
-          username: ${{ secrets.BASEFLOW_ACR_USERNAME }}
-          password: ${{ secrets.BASEFLOW_ACR_PASSWORD }}
-          push: ${{ github.event_name != 'pull_request' }}
-          vulnerability_scan: ${{ github.event_name != 'pull_request' }}
-          version: ${{ steps.get_version.outputs.version }}
-          context: ./oxybox
-      - uses: ./.github/actions/docker
         if: github.ref == 'refs/heads/main'
         name: Build docker image to docker hub
         with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
-          registry: registry-1.docker.io
           repository: baseflow/oxybox
           push: ${{ github.event_name != 'pull_request' }}
           vulnerability_scan: ${{ github.event_name != 'pull_request' }}
@@ -57,9 +45,6 @@ jobs:
         if: github.ref == 'refs/heads/main'
         name: Build docker image to docker hub
         with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
-          registry: registry-1.docker.io
           push: ${{ github.event_name != 'pull_request' }}
           repository: baseflow/oxybox
           vulnerability_scan: ${{ github.event_name != 'pull_request' }}
