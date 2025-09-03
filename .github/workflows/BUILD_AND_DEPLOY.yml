@@ -22,8 +22,7 @@ jobs:
   # will only scan for vulnerabilities and push to acr on push events
   docker-build:
     name: Build docker image
-    # runs-on: baseflow-runner
-    runs-on: ubuntu-latest
+    runs-on: baseflow-runner
     steps:
       - uses: actions/checkout@v4
         name: Checkout
@@ -32,7 +31,7 @@ jobs:
         run: |
           version=$(grep '^version' oxybox/Cargo.toml | head -n 1 | cut -d '"' -f2)
           echo "version=$version" >> $GITHUB_OUTPUT
-      - uses: ./.github/actions/docker
+      - uses: Baseflow/github-actions/docker@main
         name: Build docker image
         with:
           username: ${{ secrets.BASEFLOW_ACR_USERNAME }}
@@ -41,7 +40,7 @@ jobs:
           vulnerability_scan: ${{ github.event_name != 'pull_request' }}
           version: ${{ steps.get_version.outputs.version }}
           context: ./oxybox
-      - uses: ./.github/actions/docker
+      - uses: Baseflow/github-actions/docker@main
         if: github.ref == 'refs/heads/main'
         name: Build docker image to docker hub
         with:
@@ -53,7 +52,7 @@ jobs:
           vulnerability_scan: ${{ github.event_name != 'pull_request' }}
           version: ${{ steps.get_version.outputs.version }}
           context: ./oxybox
-      - uses: ./.github/actions/docker
+      - uses: Baseflow/github-actions/docker@main
         if: github.ref == 'refs/heads/main'
         name: Build docker image to docker hub
         with:
