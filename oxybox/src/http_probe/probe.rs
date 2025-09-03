@@ -346,7 +346,24 @@ async fn handle_target_probe(
             }
         }
         Err(e) => {
+            // in case we cannot probe the url, send a failed probe with zeroed metrics
             println!("[{padded_tenant}] ❌ Probe error for {url}: {e}");
+            let probe = ProbeResult {
+                url: url.to_string(),
+                dns_time: None,
+                connect_time: None,
+                tls_time: None,
+                processing_time: None,
+                cert_validity_seconds: None,
+                http_status: None,
+                http_version: None,
+                transfer_time: None,
+                total_probe_time: 0.0,
+            };
+            let metrics = create_probe_metrics(&probe, false);
+            if let Err(e) = send_to_mimir(mimir_target, Some(org_id), metrics).await {
+                println!("[{padded_tenant}] Failed to send error metrics for {url}: {e}");
+            }
         }
     }
 }
