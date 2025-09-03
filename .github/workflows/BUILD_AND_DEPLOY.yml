@@ -42,7 +42,7 @@ jobs:
         shell: bash
         id: build
         env:
-          DOCKERFILE: ./oxybox/DockerFile
+          DOCKERFILE: ./oxybox/Dockerfile
           TAG: ${{ steps.determine-tag.outputs.tag }}
           CONTEXT: ./oxybox
           VERSION: ${{ steps.get_version.outputs.version }}
