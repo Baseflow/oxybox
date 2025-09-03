@@ -61,7 +61,6 @@ jobs:
       
       - uses: aquasecurity/trivy-action@master
         name: Vulnerability Scan
-        if: inputs.build == 'true' && inputs.vulnerability_scan == 'true'
         with:
           image-ref: baseflow/oxybox:latest 
           scanners: vuln #,config,secret
@@ -72,7 +71,6 @@ jobs:
           format: 'table'
 
       - name: Push docker image
-        if: inputs.build == 'true' && inputs.push == 'true'
         shell: bash
         run: |
           docker push baseflow/oxybox --all-tags 
