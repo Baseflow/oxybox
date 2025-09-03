@@ -17,17 +17,12 @@ on:
       - 'oxybox/src/**'
       - '.github/workflows/BUILD_AND_DEPLOY.yml'
 
-permissions:
-  actions: read
-  contents: read
-
 jobs:
   # validate that the docker image is built.
   # will only scan for vulnerabilities and push to acr on push events
   docker-build:
     name: Build docker image
-    # runs-on: baseflow-runner
-    runs-on: ubuntu-latest
+    runs-on: baseflow-runner
     steps:
       - uses: actions/checkout@v4
         name: Checkout
