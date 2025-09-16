@@ -10,6 +10,7 @@ use tokio_native_tls::TlsConnector as TokioTlsConnector;
 use x509_parser::parse_x509_certificate;
 
 use crate::config::probe_config::{OrganisationConfig, TargetConfig};
+use crate::http_probe::report;
 use crate::mimir::client::send_to_mimir;
 use crate::mimir::create_probe_metrics;
 
@@ -201,7 +202,8 @@ async fn probe_url(
             )
         }
         Err(e) => {
-            log::error!("HTTP request failed for URL {url}: {e}");
+            let error = report(&e);
+            log::error!("HTTP request failed for URL {url}: {error}");
             return Err(format!("HTTP request failed for URL {url}: {e}"));
         }
     };

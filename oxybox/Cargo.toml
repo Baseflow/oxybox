@@ -1,6 +1,6 @@
 [package]
 name = "oxybox"
-version = "1.0.2"
+version = "1.0.3"
 authors = ["Thomas Luijken"]
 categories = ["command-line-utilities"]
 description = "A drop in replacement for blackbox exporter for Prometheus, with support for TLS and HTTP/3."
