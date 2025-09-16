@@ -1,7 +1,6 @@
 use std::{net::IpAddr, time::Duration};
 use std::env;
 
-use dotenvy::dotenv;
 use tokio_native_tls::TlsConnector as TokioTlsConnector;
 use trust_dns_resolver::{
     TokioAsyncResolver,
@@ -23,8 +22,6 @@ pub struct AppConfig {
 /// It also sets up the DNS hosts and Mimir endpoint.
 pub fn load_config() -> AppConfig {
 
-    dotenv().ok();
-
     let config_file_location =
         env::var("CONFIG_FILE").unwrap_or_else(|_| "config.yml".to_string());
     let config_str = std::fs::read_to_string(&config_file_location)
@@ -38,7 +35,7 @@ pub fn load_config() -> AppConfig {
         .map(|s| s.trim().to_string())
         .collect();
 
-    println!("Using DNS hosts: {:?}", dns_hosts);
+    log::info!("Using DNS hosts: {:?}", dns_hosts);
 
     let mimir_endpoint =
         env::var("MIMIR_ENDPOINT").unwrap_or_else(|_| "http://localhost:9009".to_string());

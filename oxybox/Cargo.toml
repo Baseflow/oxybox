@@ -1,6 +1,6 @@
 [package]
 name = "oxybox"
-version = "1.0.1"
+version = "1.0.2"
 authors = ["Thomas Luijken"]
 categories = ["command-line-utilities"]
 description = "A drop in replacement for blackbox exporter for Prometheus, with support for TLS and HTTP/3."
@@ -17,7 +17,7 @@ tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json",  "rustls-tls", "http3"] }
 native-tls = "0.2"
 tokio-native-tls = "0.3"
-x509-parser = "0.17"
+x509-parser = "0.18"
 url = "2"
 prost = "0.14"
 snap = "1.1"
@@ -32,6 +32,8 @@ unicode-truncate = "2.0"
 openssl = { version = "0.10", features = ["vendored"] }
 serde_yaml = "0.9"
 dotenvy = "0.15"
+env_logger = "0.11"
+log = "0.4"
 
 [build-dependencies]
 prost-build = "0.14"   # Protobuf code generator for Prost

@@ -26,7 +26,7 @@ pub async fn send_to_mimir(
     metrics: Vec<TimeSeries>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if metrics.is_empty() {
-        println!("No metrics to send.");
+        log::warn!("No metrics to send.");
         return Ok(());
     }
 
@@ -66,7 +66,7 @@ pub async fn send_to_mimir(
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        eprintln!("Failed to push to Mimir: {} - {}", status, body);
+        log::error!("Failed to push to Mimir: {} - {}", status, body);
         return Err(format!("Failed to push to Mimir: {status} - {body}").into());
     }
     Ok(())
@@ -155,8 +155,8 @@ mod tests {
 
         // Attempt to send
         match send_to_mimir(mimir_url, tenant_id, metrics_to_send).await {
-            Ok(_) => println!("Test metrics sent successfully."),
-            Err(e) => eprintln!("Failed to send test metrics: {}", e),
+            Ok(_) => log::debug!("Test metrics sent successfully."),
+            Err(e) => log::debug!("Failed to send test metrics: {}", e),
         }
 
         assert!(true);

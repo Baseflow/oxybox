@@ -116,7 +116,7 @@ async fn get_connect_timings(
             (tls_time, cert_validity_seconds)
         }
         Err(e) => {
-            eprintln!("Failed to establish TLS connection for host {host}: {e}");
+            log::error!("Failed to establish TLS connection for host {host}: {e}");
             return Err(format!(
                 "Failed to establish TLS connection for host {host}: {e}"
             ));
@@ -201,7 +201,7 @@ async fn probe_url(
             )
         }
         Err(e) => {
-            eprintln!("HTTP request failed for URL {url}: {e}");
+            log::error!("HTTP request failed for URL {url}: {e}");
             return Err(format!("HTTP request failed for URL {url}: {e}"));
         }
     };
@@ -323,7 +323,7 @@ async fn handle_target_probe(
                 .unwrap_or(false);
 
             if accepted {
-                println!(
+                log::debug!(
                     "[{padded_tenant}] ✅ URL: {}, Status: {:?}, Elapsed: {:.2}ms, Cert: {}",
                     url,
                     probe.http_status,
@@ -334,7 +334,7 @@ async fn handle_target_probe(
                         .unwrap_or_else(|| "N/A".to_string())
                 );
             } else {
-                println!(
+                log::error!(
                     "[{padded_tenant}] ❌ Unexpected status for {url}: {:?} (accepted: {:?})",
                     probe.http_status, target.accepted_status_codes
                 );
@@ -342,12 +342,12 @@ async fn handle_target_probe(
 
             let metrics = create_probe_metrics(&probe, accepted);
             if let Err(e) = send_to_mimir(mimir_target, Some(org_id), metrics).await {
-                println!("[{padded_tenant}] Failed to send metrics for {url}: {e}");
+                log::error!("[{padded_tenant}] Failed to send metrics for {url}: {e}");
             }
         }
         Err(e) => {
             // in case we cannot probe the url, send a failed probe with zeroed metrics
-            println!("[{padded_tenant}] ❌ Probe error for {url}: {e}");
+            log::error!("[{padded_tenant}] ❌ Probe error for {url}: {e}");
             let probe = ProbeResult {
                 url: url.to_string(),
                 dns_time: None,
@@ -362,7 +362,7 @@ async fn handle_target_probe(
             };
             let metrics = create_probe_metrics(&probe, false);
             if let Err(e) = send_to_mimir(mimir_target, Some(org_id), metrics).await {
-                println!("[{padded_tenant}] Failed to send error metrics for {url}: {e}");
+                log::error!("[{padded_tenant}] Failed to send error metrics for {url}: {e}");
             }
         }
     }

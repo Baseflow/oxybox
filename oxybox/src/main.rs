@@ -1,5 +1,6 @@
 use std::time::Duration;
 use config::app_config::{load_config, setup_resolver, setup_tls_connector};
+use dotenvy::dotenv;
 use tokio::time::sleep;
 pub mod http_probe;
 use http_probe::probe::run_probe_loop;
@@ -8,11 +9,13 @@ pub mod mimir;
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
+    env_logger::init();
     let app_config = load_config();
     let resolver = setup_resolver(&app_config.dns_hosts).expect("Failed to init resolver");
     let tls_connector = setup_tls_connector().expect("Failed to build TLS connector");
 
-    println!("Using Mimir endpoint: {}", app_config.mimir_endpoint);
+    log::info!("Using Mimir endpoint: {}", app_config.mimir_endpoint);
 
     for (key, org_config) in app_config.config {
         let resolver = resolver.clone();
