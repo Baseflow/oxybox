@@ -122,5 +122,7 @@ The following environment variables can be used to configure Oxybox’s runtime 
 | `CONFIG_FILE`    | `example-config.yml`                           | `config.yml`            |
 | `DNS_HOSTS`      | `8.8.8.8, 1.1.1.1`                             | `1.1.1.1, 8.8.8.8`      |
 | `MIMIR_ENDPOINT` | `http://mimir.grafana.svc.cluster.local:9090/` | `http://localhost:9009` |
+| `RUST_LOG`       | `debug`                                        | `error`                 |
+
 
 These can be defined in a `.env` file or passed directly through your environment.
