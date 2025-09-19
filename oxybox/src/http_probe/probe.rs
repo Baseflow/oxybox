@@ -18,7 +18,6 @@ use trust_dns_resolver::{AsyncResolver, TokioAsyncResolver};
 
 use super::result::ProbeResult;
 
-
 /// Struct to hold the results of an HTTP probe.
 /// This struct contains various metrics related to the HTTP request, such as DNS resolution time, connection time, TLS handshake time, HTTP status code, and more.
 /// # Fields
@@ -46,7 +45,6 @@ async fn get_connect_timings(
     >,
     with_tls: bool,
 ) -> Result<HttpProbeResult, String> {
-
     // step one: DNS resolution
     let dns_start = Instant::now();
     if host.is_empty() {
@@ -87,7 +85,7 @@ async fn get_connect_timings(
             tls_time: None,
         });
     }
-    
+
     // step four: TLS handshake
     let tls_start = Instant::now();
     let tls_stream = connector.connect(host, stream).await;
@@ -166,7 +164,6 @@ async fn probe_url(
     >,
     url: &str,
 ) -> Result<ProbeResult, String> {
-
     let probe_start = Instant::now();
     let url = url.to_string();
 
@@ -225,7 +222,6 @@ async fn probe_url(
     })
 }
 
-
 pub async fn run_probe_loop(
     tenant_name: String,
     org_config: OrganisationConfig,
@@ -234,18 +230,10 @@ pub async fn run_probe_loop(
     mimir_endpoint: String,
     max_org_width: usize,
 ) {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(5))
-        .danger_accept_invalid_certs(true)
-        .user_agent("reqwest-h2-h3-probe/1.0")
-        .build()
-        .expect("Failed to create client");
-
     loop {
         let mut handles = vec![];
 
         for target in &org_config.targets {
-            let client = client.clone();
             let connector = tls_connector.clone();
             let resolver = resolver.clone();
             let target = target.clone();
@@ -258,7 +246,6 @@ pub async fn run_probe_loop(
                     tenant_name,
                     &org_id,
                     &target,
-                    &client,
                     &connector,
                     &resolver,
                     &mimir_endpoint,
@@ -287,7 +274,6 @@ fn to_fixed_width(input: &str, width: usize) -> String {
     format!("{:<width$}", truncated, width = width)
 }
 
-
 /// Handles probing a target URL and sending the results to Mimir.
 /// # Arguments
 ///     * `tenant` - The tenant name for logging and metrics.
@@ -302,12 +288,18 @@ async fn handle_target_probe(
     tenant: String,
     org_id: &str,
     target: &TargetConfig,
-    client: &Client,
     tls_connector: &TokioTlsConnector,
     resolver: &TokioAsyncResolver,
     mimir_target: &str,
     max_width: usize,
 ) {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(5))
+        .danger_accept_invalid_certs(true)
+        .user_agent("reqwest-h2-h3-probe/1.0")
+        .build()
+        .expect("Failed to create client");
+
     let url = &target.url;
     let result = probe_url(client.clone(), tls_connector, resolver, url).await;
 
@@ -338,7 +330,8 @@ async fn handle_target_probe(
             } else {
                 log::error!(
                     "[{padded_tenant}] ❌ Unexpected status for {url}: {:?} (accepted: {:?})",
-                    probe.http_status, target.accepted_status_codes
+                    probe.http_status,
+                    target.accepted_status_codes
                 );
             }
 

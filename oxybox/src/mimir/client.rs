@@ -160,6 +160,5 @@ mod tests {
         }
 
         assert!(true);
-        
     }
 }

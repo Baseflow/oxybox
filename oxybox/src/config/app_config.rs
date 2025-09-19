@@ -1,5 +1,5 @@
-use std::{net::IpAddr, time::Duration};
 use std::env;
+use std::{net::IpAddr, time::Duration};
 
 use tokio_native_tls::TlsConnector as TokioTlsConnector;
 use trust_dns_resolver::{
@@ -21,11 +21,9 @@ pub struct AppConfig {
 /// parses it into a `Config` struct, and overrides certain values with environment variables.
 /// It also sets up the DNS hosts and Mimir endpoint.
 pub fn load_config() -> AppConfig {
-
-    let config_file_location =
-        env::var("CONFIG_FILE").unwrap_or_else(|_| "config.yml".to_string());
-    let config_str = std::fs::read_to_string(&config_file_location)
-        .expect("Failed to read config.yaml");
+    let config_file_location = env::var("CONFIG_FILE").unwrap_or_else(|_| "config.yml".to_string());
+    let config_str =
+        std::fs::read_to_string(&config_file_location).expect("Failed to read config.yaml");
 
     let config: Config = serde_yaml::from_str(&config_str).expect("Invalid YAML");
 
@@ -65,7 +63,9 @@ pub fn setup_tls_connector() -> Result<TokioTlsConnector, native_tls::Error> {
 ///     * `dns_hosts` - A slice of strings representing DNS host IPs (e.g., "
 /// # Returns
 ///     A `Result` containing a `TokioAsyncResolver` if successful, or an error if the setup fails.
-pub fn setup_resolver(dns_hosts: &[String]) -> Result<TokioAsyncResolver, Box<dyn std::error::Error>> {
+pub fn setup_resolver(
+    dns_hosts: &[String],
+) -> Result<TokioAsyncResolver, Box<dyn std::error::Error>> {
     let mut opts = ResolverOpts::default();
     opts.attempts = 2;
     opts.timeout = Duration::from_millis(100);

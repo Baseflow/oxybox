@@ -1,6 +1,6 @@
-use std::time::Duration;
 use config::app_config::{load_config, setup_resolver, setup_tls_connector};
 use dotenvy::dotenv;
+use std::time::Duration;
 use tokio::time::sleep;
 pub mod http_probe;
 use http_probe::probe::run_probe_loop;
@@ -37,6 +37,3 @@ async fn main() {
         sleep(Duration::from_secs(60)).await;
     }
 }
-
-
-

@@ -4,7 +4,6 @@ use serde::Deserialize;
 /// Contains the organisation ID, the polling interval in seconds, and a list of target configurations.
 #[derive(Debug, Clone, Deserialize)]
 pub struct OrganisationConfig {
-
     /// The organisation ID for which this configuration applies.
     /// This translates to the 'Org-Id' header in the Mimir requests.
     pub organisation_id: String,
@@ -20,7 +19,6 @@ pub struct OrganisationConfig {
 /// Contains the target URL and a list of accepted HTTP status codes.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TargetConfig {
-
     /// The URL of the target service to be monitored.
     pub url: String,
 
@@ -74,7 +72,9 @@ pub mod test {
         assert_eq!(demo_config.targets[0].url, "https://www.google.com");
         assert_eq!(demo_config.targets[1].url, "https://www.github.com");
         assert_eq!(demo_config.targets[1].accepted_status_codes, vec![200, 301]);
-        let org_x_config = config.get("organisationX").expect("OrganisationX config not found");
+        let org_x_config = config
+            .get("organisationX")
+            .expect("OrganisationX config not found");
         assert_eq!(org_x_config.organisation_id, "1");
         assert_eq!(org_x_config.polling_interval_seconds, 20);
         assert_eq!(org_x_config.targets.len(), 1);
