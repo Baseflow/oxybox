@@ -256,9 +256,10 @@ pub async fn run_probe_loop(
         }
 
         for handle in handles {
-            let _ = handle.await;
+            if let Err(join_err) = handle.await {
+                log::error!("Task panicked: {:?}", join_err);
+            }
         }
-
         sleep(Duration::from_secs(org_config.polling_interval_seconds)).await;
     }
 }
