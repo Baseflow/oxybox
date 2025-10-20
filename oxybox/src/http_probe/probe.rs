@@ -233,6 +233,8 @@ pub async fn run_probe_loop(
     loop {
         let mut handles = vec![];
 
+        let start_time = Instant::now();
+
         for target in &org_config.targets {
             let connector = tls_connector.clone();
             let resolver = resolver.clone();
@@ -241,7 +243,9 @@ pub async fn run_probe_loop(
             let org_id = org_config.organisation_id.clone();
             let mimir_endpoint = mimir_endpoint.clone();
 
-            handles.push(tokio::spawn(async move {
+            let probe_timeout_duration: Duration = Duration::from_secs(org_config.polling_interval_seconds);
+
+            handles.push(tokio::spawn(tokio::time::timeout(probe_timeout_duration, async move {
                 handle_target_probe(
                     tenant_name,
                     &org_id,
@@ -252,7 +256,7 @@ pub async fn run_probe_loop(
                     max_org_width,
                 )
                 .await;
-            }));
+            })));
         }
 
         for handle in handles {
@@ -260,7 +264,9 @@ pub async fn run_probe_loop(
                 log::error!("Task panicked: {:?}", join_err);
             }
         }
-        sleep(Duration::from_secs(org_config.polling_interval_seconds)).await;
+        let elapsed = start_time.elapsed();
+
+        sleep(Duration::from_secs(org_config.polling_interval_seconds - elapsed.as_secs())).await;
     }
 }
 
