@@ -243,20 +243,24 @@ pub async fn run_probe_loop(
             let org_id = org_config.organisation_id.clone();
             let mimir_endpoint = mimir_endpoint.clone();
 
-            let probe_timeout_duration: Duration = Duration::from_secs(org_config.polling_interval_seconds);
+            let probe_timeout_duration: Duration =
+                Duration::from_secs(org_config.polling_interval_seconds);
 
-            handles.push(tokio::spawn(tokio::time::timeout(probe_timeout_duration, async move {
-                handle_target_probe(
-                    tenant_name,
-                    &org_id,
-                    &target,
-                    &connector,
-                    &resolver,
-                    &mimir_endpoint,
-                    max_org_width,
-                )
-                .await;
-            })));
+            handles.push(tokio::spawn(tokio::time::timeout(
+                probe_timeout_duration,
+                async move {
+                    handle_target_probe(
+                        tenant_name,
+                        &org_id,
+                        &target,
+                        &connector,
+                        &resolver,
+                        &mimir_endpoint,
+                        max_org_width,
+                    )
+                    .await;
+                },
+            )));
         }
 
         for handle in handles {
@@ -264,9 +268,13 @@ pub async fn run_probe_loop(
                 log::error!("Task panicked: {:?}", join_err);
             }
         }
-        let elapsed = start_time.elapsed();
+        let elapsed = start_time.elapsed().as_secs();
+        let wait = org_config
+            .polling_interval_seconds
+            .checked_sub(elapsed)
+            .unwrap_or(0);
 
-        sleep(Duration::from_secs(org_config.polling_interval_seconds - elapsed.as_secs())).await;
+        sleep(Duration::from_secs(wait)).await;
     }
 }
 
