@@ -1,5 +1,5 @@
 # Dockerfile for building the Oxybox application using Rust and musl
-FROM clux/muslrust
+FROM clux/muslrust:stble
 
 # Set the environment variables for the build
 # We're using the reqwest unstable feature HTTP3
@@ -8,7 +8,7 @@ RUN mkdir /source
 WORKDIR /source
 COPY ./Cargo.toml .
 COPY ./src/ ./src/
-COPY ./protos / ./protos/
+COPY ./protos ./protos/
 COPY ./build.rs .
 RUN cargo build --release
 RUN strip ./target/x86_64-unknown-linux-musl/release/oxybox
