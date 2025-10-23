@@ -1,0 +1,65 @@
+name: "Build and analyse"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  # validate that the docker image is built.
+  # will only scan for vulnerabilities and push to acr on push events
+  docker-build:
+    name: Build docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Get project version from Cargo.toml
+        id: get_version
+        run: |
+          version=$(grep '^version' oxybox/Cargo.toml | head -n 1 | cut -d '"' -f2)
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Docker build image
+        shell: bash
+        id: build
+        env:
+          DOCKERFILE: ./oxybox/Dockerfile
+          TAG: ${{ steps.determine-tag.outputs.tag }}
+          CONTEXT: ./oxybox
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          docker buildx build \
+            --no-cache \
+            --label time=$(date +%Y%m%d%H%M%S) \
+            --label branch=${GITHUB_REF_NAME} \
+            --label commit=${{ github.sha }} \
+            --file ${DOCKERFILE} \
+            --build-arg "BRANCH=${{ github.ref_name }}" \
+            --build-arg "COMMIT=${{ github.sha }}" \
+            --tag baseflow/oxybox:latest \
+            --tag baseflow/oxybox:${VERSION} \
+            ${CONTEXT}
+      
+      - uses: aquasecurity/trivy-action@master
+        name: Vulnerability Scan
+        with:
+          image-ref: baseflow/oxybox:latest 
+          scanners: vuln #,config,secret
+          severity: 'CRITICAL,HIGH'
+          vuln-type: 'os,library'
+          ignore-unfixed: true
+          exit-code: '1'
+          format: 'table'
