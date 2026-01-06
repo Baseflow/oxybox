@@ -14,6 +14,7 @@ pub struct AppConfig {
     pub mimir_endpoint: String,
     pub dns_hosts: Vec<String>,
     pub max_org_width: usize,
+    pub max_concurrent_probes: Option<usize>,
 }
 
 /// Load the application configuration from a YAML file and environment variables
@@ -40,11 +41,20 @@ pub fn load_config() -> AppConfig {
 
     let max_org_width = config.keys().map(|org| org.len()).max().unwrap_or(10);
 
+    let max_concurrent_probes = match env::var("MAX_CONCURRENT_PROBES") {
+        Ok(val) => Some(
+            val.parse()
+                .expect("MAX_CONCURRENT_PROBES must be a valid usize"),
+        ),
+        Err(_) => None,
+    };
+
     AppConfig {
         config,
         mimir_endpoint,
         dns_hosts,
         max_org_width,
+        max_concurrent_probes,
     }
 }
 

@@ -1,7 +1,10 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use rand::{rng, Rng};
 use tokio::net::TcpStream;
 use reqwest::Client;
+use tokio::sync::Semaphore;
 use tokio::time::{sleep, timeout, Duration};
 use trust_dns_resolver::name_server::GenericConnector;
 use url::Url;
@@ -223,6 +226,10 @@ async fn probe_url(
     })
 }
 
+fn jitter(max_ms: u64) -> Duration {
+    Duration::from_millis(rng().random_range(0..max_ms))
+}
+
 pub async fn run_probe_loop(
     tenant_name: String,
     org_config: OrganisationConfig,
@@ -230,38 +237,62 @@ pub async fn run_probe_loop(
     tls_connector: TokioTlsConnector,
     mimir_endpoint: String,
     max_org_width: usize,
+    semaphore: Arc<Semaphore>,
 ) {
-    loop {
-        let mut handles = vec![];
+    // Build ONE client per org loop (or even global) and reuse it.
+    let client = Client::builder()
+        .timeout(Duration::from_secs(5))
+        .danger_accept_invalid_certs(true)
+        .user_agent("reqwest-h2-h3-probe/1.0")
+        .build()
+        .expect("Failed to create client");
 
+    loop {
         let start_time = Instant::now();
+        let mut handles = Vec::with_capacity(org_config.targets.len());
+
+        // Per-probe timeout (separate from polling interval)
+        let probe_timeout = Duration::from_secs(10);
 
         for target in &org_config.targets {
+            let semaphore = semaphore.clone();
             let connector = tls_connector.clone();
             let resolver = resolver.clone();
             let target = target.clone();
             let tenant_name = tenant_name.clone();
             let org_id = org_config.organisation_id.clone();
             let mimir_endpoint = mimir_endpoint.clone();
+            let client = client.clone();
 
-            let probe_timeout_duration: Duration =
-                Duration::from_secs(org_config.polling_interval_seconds);
+            handles.push(tokio::spawn(async move {
+                // ✅ Permit is held until the task returns
+                let _permit = semaphore.acquire_owned().await.expect("Semaphore closed");
 
-            handles.push(tokio::spawn(tokio::time::timeout(
-                probe_timeout_duration,
-                async move {
+                // ✅ Jitter per task
+                sleep(jitter(250)).await;
+
+                // ✅ Timeout wraps the whole probe work
+                let result = tokio::time::timeout(probe_timeout, async {
                     handle_target_probe(
                         tenant_name,
                         &org_id,
                         &target,
+                        client,
                         &connector,
                         &resolver,
                         &mimir_endpoint,
                         max_org_width,
                     )
-                    .await;
-                },
-            )));
+                    .await
+                })
+                .await;
+
+                if let Err(_) = result {
+                    // timeout fired
+                    // (optionally) emit a metric/log here for "probe timeout"
+                    log::warn!("Probe timed out for {}", target.url);
+                }
+            }));
         }
 
         for handle in handles {
@@ -269,6 +300,7 @@ pub async fn run_probe_loop(
                 log::error!("Task panicked: {:?}", join_err);
             }
         }
+
         let elapsed = start_time.elapsed().as_secs();
         let wait = org_config
             .polling_interval_seconds
@@ -304,18 +336,12 @@ async fn handle_target_probe(
     tenant: String,
     org_id: &str,
     target: &TargetConfig,
+    client: Client,
     tls_connector: &TokioTlsConnector,
     resolver: &TokioAsyncResolver,
     mimir_target: &str,
     max_width: usize,
 ) {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(5))
-        .danger_accept_invalid_certs(true)
-        .user_agent("reqwest-h2-h3-probe/1.0")
-        .build()
-        .expect("Failed to create client");
-
     let url = &target.url;
     let result = probe_url(client.clone(), tls_connector, resolver, url).await;
 

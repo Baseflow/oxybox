@@ -34,6 +34,7 @@ serde_yaml = "0.9"
 dotenvy = "0.15"
 env_logger = "0.11"
 log = "0.4"
+rand = "0.9"
 
 [build-dependencies]
 prost-build = "0.14"   # Protobuf code generator for Prost

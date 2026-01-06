@@ -24,3 +24,6 @@ devbox.lock
 
 **/node_modules
 **/pkg
+
+# user configs
+**/config.yml
