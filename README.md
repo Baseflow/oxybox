@@ -117,12 +117,13 @@ Each top-level key (e.g., `demo`, `organisationX`) represents a distinct probe g
 
 The following environment variables can be used to configure Oxybox’s runtime behavior:
 
-| Name             | Example Value                                  | Default Value           |
-| ---------------- | ---------------------------------------------- | ----------------------- |
-| `CONFIG_FILE`    | `example-config.yml`                           | `config.yml`            |
-| `DNS_HOSTS`      | `8.8.8.8, 1.1.1.1`                             | `1.1.1.1, 8.8.8.8`      |
-| `MIMIR_ENDPOINT` | `http://mimir.grafana.svc.cluster.local:9090/` | `http://localhost:9009` |
-| `RUST_LOG`       | `debug`                                        | `error`                 |
+| Name                    | Example Value                                  | Default Value           |
+| ----------------------- | ---------------------------------------------- | ----------------------- |
+| `CONFIG_FILE`           | `example-config.yml`                           | `config.yml`            |
+| `DNS_HOSTS`             | `8.8.8.8, 1.1.1.1`                             | `1.1.1.1, 8.8.8.8`      |
+| `MIMIR_ENDPOINT`        | `http://mimir.grafana.svc.cluster.local:9090/` | `http://localhost:9009` |
+| `RUST_LOG`              | `debug`                                        | `error`                 |
+| `MAX_CONCURRENT_PROBES` | `24`                                           | `32`                    |
 
 
 These can be defined in a `.env` file or passed directly through your environment.
