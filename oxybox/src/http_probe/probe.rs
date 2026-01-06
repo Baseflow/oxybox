@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use tokio::net::TcpStream;
 use reqwest::Client;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout, Duration};
 use trust_dns_resolver::name_server::GenericConnector;
 use url::Url;
 
@@ -69,10 +69,11 @@ async fn get_connect_timings(
         true => SocketAddr::new(ip?, 443),
         false => SocketAddr::new(ip?, 80),
     };
-    let stream = tokio::net::TcpStream::connect(socket_addr).await;
-    let stream = match stream {
-        Ok(s) => s,
-        Err(e) => return Err(format!("Failed to connect to host {host}: {e}")),
+    let connect_deadline = Duration::from_secs(3); // tune per environment
+    let stream = match timeout(connect_deadline, TcpStream::connect(socket_addr)).await {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err(format!("Failed to connect to host {host}: {e}")),
+        Err(_) => return Err(format!("Connect timeout after {:?} to {host}", connect_deadline)),
     };
 
     // step tree: TCP connection established
