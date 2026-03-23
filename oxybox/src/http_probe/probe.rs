@@ -261,6 +261,7 @@ pub async fn run_probe_loop(
             let target = target.clone();
             let tenant_name = tenant_name.clone();
             let org_id = org_config.organisation_id.clone();
+            let labels = target.labels.clone();
             let mimir_endpoint = mimir_endpoint.clone();
             let client = client.clone();
 
@@ -268,10 +269,8 @@ pub async fn run_probe_loop(
                 // ✅ Permit is held until the task returns
                 let _permit = semaphore.acquire_owned().await.expect("Semaphore closed");
 
-                // ✅ Jitter per task
                 sleep(jitter(250)).await;
 
-                // ✅ Timeout wraps the whole probe work
                 let result = tokio::time::timeout(probe_timeout, async {
                     handle_target_probe(
                         tenant_name,
@@ -282,6 +281,7 @@ pub async fn run_probe_loop(
                         &resolver,
                         &mimir_endpoint,
                         max_org_width,
+                        labels,
                     )
                     .await
                 })
@@ -332,6 +332,7 @@ fn to_fixed_width(input: &str, width: usize) -> String {
 ///     * `resolver` - The DNS resolver for resolving hostnames.
 ///     * `mimir_target` - The Mimir endpoint to send metrics to.
 ///     * `max_width` - The maximum width for tenant name formatting in logs.
+///     * `labels` - Optional additional labels to include in the metrics.
 async fn handle_target_probe(
     tenant: String,
     org_id: &str,
@@ -341,6 +342,7 @@ async fn handle_target_probe(
     resolver: &TokioAsyncResolver,
     mimir_target: &str,
     max_width: usize,
+    labels: Option<Vec<(String, String)>>,
 ) {
     let url = &target.url;
     let result = probe_url(client.clone(), tls_connector, resolver, url).await;
@@ -350,6 +352,12 @@ async fn handle_target_probe(
         .unwrap()
         .as_secs_f64();
     let padded_tenant = to_fixed_width(&tenant, max_width);
+
+    let labels = labels.as_ref().map(|l| {                                                                                                                                                                                                               
+        l.iter()                                                                                                                                                                                                                                         
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect::<Vec<(&str, &str)>>()                                                                                                                                                                                                              
+    });      
 
     match result {
         Ok(probe) => {
@@ -377,7 +385,12 @@ async fn handle_target_probe(
                 );
             }
 
-            let metrics = create_probe_metrics(&probe, accepted);
+            let metrics = create_probe_metrics(
+                &probe, 
+                accepted, 
+                labels
+            );
+
             if let Err(e) = send_to_mimir(mimir_target, Some(org_id), metrics).await {
                 log::error!("[{padded_tenant}] Failed to send metrics for {url}: {e}");
             }
@@ -397,7 +410,7 @@ async fn handle_target_probe(
                 transfer_time: None,
                 total_probe_time: 0.0,
             };
-            let metrics = create_probe_metrics(&probe, false);
+            let metrics = create_probe_metrics(&probe, false, labels);
             if let Err(e) = send_to_mimir(mimir_target, Some(org_id), metrics).await {
                 log::error!("[{padded_tenant}] Failed to send error metrics for {url}: {e}");
             }

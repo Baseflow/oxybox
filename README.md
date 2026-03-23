@@ -101,6 +101,9 @@ organisationX:
   polling_interval_seconds: 20
   targets:
     - url: http://www.example.com
+      labels:
+        environment: production
+        region: west-eu
 ```
 
 Each top-level key (e.g., `demo`, `organisationX`) represents a distinct probe group. The configuration allows you to define:
@@ -110,6 +113,7 @@ Each top-level key (e.g., `demo`, `organisationX`) represents a distinct probe g
 * `targets`: List of endpoints to monitor.
   * `url`: The target URL.
   * `accepted_status_codes` (optional): A list of HTTP status codes considered successful.
+  * `labels` (optional): A list of additional labels to send with the timeseries metrics.
 
 ---
 

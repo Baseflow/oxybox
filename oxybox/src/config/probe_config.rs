@@ -1,4 +1,13 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+use std::collections::HashMap;
+
+fn deserialize_labels<'de, D>(deserializer: D) -> Result<Option<Vec<(String, String)>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let map = Option::<HashMap<String, String>>::deserialize(deserializer)?;
+    Ok(map.map(|m| m.into_iter().collect()))
+}
 
 /// An organisation configuration for the OxyBox service.
 /// Contains the organisation ID, the polling interval in seconds, and a list of target configurations.
@@ -26,6 +35,12 @@ pub struct TargetConfig {
     /// Defaults to 200 if not specified.
     #[serde(default = "default_status_codes")]
     pub accepted_status_codes: Vec<u16>,
+
+    /// Additional labels to be included in the Mimir metrics for this target.
+    /// This is an optional field that can contain a list of key-value pairs representing the labels.
+    /// For example, you could include labels like `env: production` or `region: us-east-1` to provide more context about the target service in the metrics.
+    #[serde(default, deserialize_with = "deserialize_labels")]
+    pub labels: Option<Vec<(String, String)>>,
 }
 
 fn default_status_codes() -> Vec<u16> {

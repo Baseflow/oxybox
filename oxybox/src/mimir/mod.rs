@@ -58,6 +58,7 @@ fn create_time_series(
 pub fn create_probe_metrics(
     probe_result: &ProbeResult,
     probe_success: bool,
+    labels: Option<Vec<(&str, &str)>>,
 ) -> Vec<prompb::TimeSeries> {
     let mut metrics = Vec::new();
     let probe_successful = match probe_success {
@@ -69,7 +70,7 @@ pub fn create_probe_metrics(
         PROBE_SUCCESS_METRIC,
         &probe_result.url,
         probe_successful,
-        None,
+        labels,
     ));
 
     let phases = [
