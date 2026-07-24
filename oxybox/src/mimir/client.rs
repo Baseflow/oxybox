@@ -127,38 +127,31 @@ mod tests {
         let mimir_url = "http://localhost:9009"; // Adjust to your Mimir instance
         let tenant_id = Some("demo"); // Optional, remove if Mimir is single-tenant
 
-        let mut metrics_to_send = Vec::new();
+        let metrics_to_send = vec![
+            create_time_series(
+                "my_app_http_requests_total",
+                &[("method", "GET"), ("status", "200")],
+                1.0,
+                None,
+            ),
+            create_time_series(
+                "my_app_cpu_usage_percent",
+                &[("host", "server-a")],
+                25.5,
+                Some(Utc::now().timestamp_millis()),
+            ),
+            create_time_series(
+                "my_app_database_queries_total",
+                &[("db", "users"), ("type", "read")],
+                1.0,
+                None,
+            ),
+        ];
 
-        // Metric 1: A counter for requests
-        metrics_to_send.push(create_time_series(
-            "my_app_http_requests_total",
-            &[("method", "GET"), ("status", "200")],
-            1.0,  // For a counter, typically increment by 1 per event
-            None, // Use current timestamp
-        ));
-
-        // Metric 2: A gauge for CPU usage
-        metrics_to_send.push(create_time_series(
-            "my_app_cpu_usage_percent",
-            &[("host", "server-a")],
-            25.5,                                // Current value for a gauge
-            Some(Utc::now().timestamp_millis()), // Specific timestamp
-        ));
-
-        // Metric 3: Another counter with different labels
-        metrics_to_send.push(create_time_series(
-            "my_app_database_queries_total",
-            &[("db", "users"), ("type", "read")],
-            1.0,
-            None,
-        ));
-
-        // Attempt to send
+        // Attempt to send; a missing local Mimir is tolerated so this stays a smoke test.
         match send_to_mimir(mimir_url, tenant_id, metrics_to_send).await {
             Ok(_) => log::debug!("Test metrics sent successfully."),
             Err(e) => log::debug!("Failed to send test metrics: {}", e),
         }
-
-        assert!(true);
     }
 }

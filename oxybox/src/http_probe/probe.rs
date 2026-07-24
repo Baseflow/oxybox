@@ -322,7 +322,6 @@ pub async fn run_probe_loop(
             let target = target.clone();
             let tenant_name = tenant_name.clone();
             let org_id = org_config.organisation_id.clone();
-            let labels = target.labels.clone();
             let mimir_endpoint = mimir_endpoint.clone();
 
             handles.push(tokio::spawn(async move {
@@ -340,7 +339,6 @@ pub async fn run_probe_loop(
                         &resolver,
                         &mimir_endpoint,
                         max_org_width,
-                        labels,
                     )
                     .await
                 })
@@ -359,10 +357,7 @@ pub async fn run_probe_loop(
         }
 
         let elapsed = start_time.elapsed().as_secs();
-        let wait = org_config
-            .polling_interval_seconds
-            .checked_sub(elapsed)
-            .unwrap_or(0);
+        let wait = org_config.polling_interval_seconds.saturating_sub(elapsed);
 
         sleep(Duration::from_secs(wait)).await;
     }
@@ -388,7 +383,6 @@ fn to_fixed_width(input: &str, width: usize) -> String {
 ///     * `resolver` - The DNS resolver for resolving hostnames.
 ///     * `mimir_target` - The Mimir endpoint to send metrics to.
 ///     * `max_width` - The maximum width for tenant name formatting in logs.
-///     * `labels` - Optional additional labels to include in the metrics.
 async fn handle_target_probe(
     tenant: String,
     org_id: &str,
@@ -397,7 +391,6 @@ async fn handle_target_probe(
     resolver: &TokioAsyncResolver,
     mimir_target: &str,
     max_width: usize,
-    labels: Option<Vec<(String, String)>>,
 ) {
     let url = &target.url;
     let result = probe_url(tls_connector, resolver, url).await;
@@ -408,7 +401,7 @@ async fn handle_target_probe(
         .as_secs_f64();
     let padded_tenant = to_fixed_width(&tenant, max_width);
 
-    let labels = labels.as_ref().map(|l| {
+    let labels = target.labels.as_ref().map(|l| {
         l.iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect::<Vec<(&str, &str)>>()
