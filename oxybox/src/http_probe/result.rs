@@ -39,4 +39,7 @@ pub struct ProbeResult {
     /// The total time taken for the probe, in seconds.
     /// This is the sum of all phases: DNS resolution, connection, TLS handshake, processing, and transfer.
     pub total_probe_time: f64,
+
+    /// The number of redirects followed before reaching the final response.
+    pub redirects: u32,
 }

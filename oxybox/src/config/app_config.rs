@@ -62,6 +62,7 @@ pub fn load_config() -> AppConfig {
 pub fn setup_tls_connector() -> Result<TokioTlsConnector, native_tls::Error> {
     let mut builder = native_tls::TlsConnector::builder();
     builder.danger_accept_invalid_certs(true);
+    builder.request_alpns(&["h2", "http/1.1"]);
     let connector = builder.build()?;
     Ok(TokioTlsConnector::from(connector))
 }

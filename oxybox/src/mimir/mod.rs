@@ -15,6 +15,7 @@ const PROBE_HTTP_DURATION_METRIC: &str = "probe_http_duration_seconds";
 const PROBE_DNS_LOOKUP_TIME_METRIC: &str = "probe_dns_lookup_time_seconds";
 const PROBE_HTTP_SSL_ENABLED_METRIC: &str = "probe_http_ssl";
 const PROBE_HTTP_VERSION_METRIC: &str = "probe_http_version";
+const PROBE_HTTP_REDIRECTS_METRIC: &str = "probe_http_redirects";
 const PROBE_HTTP_SSL_EARLIEST_EXPIERY_METRIC: &str = "probe_ssl_earliest_cert_expiry";
 
 const BLACKBOX_JOB: &str = "oxybox";
@@ -49,6 +50,7 @@ fn create_time_series(
 ///    - `probe_http_ssl`: Indicates if SSL was enabled (1.0 for enabled, 0.0 for not).
 ///    - `probe_ssl_earliest_cert_expiry`: Earliest expiry time of the SSL certificate in seconds.
 ///    - `probe_http_version`: HTTP version used for the probe (e.g., 1.0, 1.1, 2.0, 3.0).
+///    - `probe_http_redirects`: Number of redirects followed before the final response.
 /// ## Arguments:
 ///     - `probe_result`: A reference to the `ProbeResult` struct containing the results of the probe.
 ///     - `probe_success`: A boolean indicating whether the probe was successful or not.
@@ -144,6 +146,13 @@ pub fn create_probe_metrics(
             None,
         ));
     }
+
+    metrics.push(create_time_series(
+        PROBE_HTTP_REDIRECTS_METRIC,
+        &probe_result.url,
+        probe_result.redirects as f64,
+        None,
+    ));
 
     metrics
 }

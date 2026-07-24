@@ -1,229 +1,298 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use rand::{rng, Rng};
+
+use http_body_util::{BodyExt, Empty};
+use hyper::body::Bytes;
+use hyper::client::conn::{http1, http2};
+use hyper::{Method, Request, Version, header};
+use hyper_util::rt::{TokioExecutor, TokioIo};
+use rand::{Rng, rng};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
-use reqwest::Client;
 use tokio::sync::Semaphore;
-use tokio::time::{sleep, timeout, Duration};
-use trust_dns_resolver::name_server::GenericConnector;
+use tokio::time::{Duration, sleep, timeout};
 use url::Url;
 
 use tokio_native_tls::TlsConnector as TokioTlsConnector;
 use x509_parser::parse_x509_certificate;
 
 use crate::config::probe_config::{OrganisationConfig, TargetConfig};
-use crate::http_probe::report;
 use crate::mimir::client::send_to_mimir;
 use crate::mimir::create_probe_metrics;
 
-use trust_dns_resolver::{AsyncResolver, TokioAsyncResolver};
+use trust_dns_resolver::TokioAsyncResolver;
 
 use super::result::ProbeResult;
 
-/// Struct to hold the results of an HTTP probe.
-/// This struct contains various metrics related to the HTTP request, such as DNS resolution time, connection time, TLS handshake time, HTTP status code, and more.
-/// # Fields
-///     * `url` - The URL that was probed.
-///     * `dns_time` - The time taken for DNS resolution, in seconds.
-///     * `connect_time` - The time taken to establish a TCP connection, in seconds.
-///     * `tls_time` - The time taken to establish a TLS connection, in seconds.
-#[derive(Debug)]
-struct HttpProbeResult {
-    dns_time: Option<f64>,
-    cert_validity_seconds: Option<f64>,
-    connect_time: Option<f64>,
-    tls_time: Option<f64>,
+const USER_AGENT_VALUE: &str = "oxybox-probe/1.0";
+
+trait IoStream: AsyncRead + AsyncWrite + Send + Unpin {}
+impl<T: AsyncRead + AsyncWrite + Send + Unpin> IoStream for T {}
+
+type DynStream = Box<dyn IoStream>;
+
+/// Convert an HTTP version to a float representation (e.g. 1.1 -> 1.1, 2.0 -> 2.0)
+fn http_version_to_f64(version: Version) -> f64 {
+    match version {
+        Version::HTTP_09 => 0.9,
+        Version::HTTP_10 => 1.0,
+        Version::HTTP_11 => 1.1,
+        Version::HTTP_2 => 2.0,
+        Version::HTTP_3 => 3.0,
+        _ => 0.0,
+    }
 }
 
-/// Function to get connection timings including DNS resolution, TCP connection, and TLS handshake
-/// Returns a `HttpProbeResult` containing the timings and certificate validity
-/// # Errors
-///     Returns an error string if any step fails, such as DNS resolution failure, TCP connection failure, or TLS handshake failure.
-async fn get_connect_timings(
-    host: &str,
+/// Maximum number of redirects followed in a single probe before giving up.
+const MAX_REDIRECTS: usize = 10;
+
+/// Per-phase result of a single request/response exchange (one redirect hop).
+struct HopResult {
+    dns_time: f64,
+    connect_time: f64,
+    tls_time: Option<f64>,
+    processing_time: f64,
+    transfer_time: f64,
+    cert_validity_seconds: Option<f64>,
+    http_status: u16,
+    http_version: f64,
+    location: Option<String>,
+}
+
+/// Performs a single request/response exchange over one freshly established
+/// connection, timing every phase on that connection.
+///
+/// The request that produces the `processing` and `transfer` timings is sent over
+/// the exact connection whose DNS resolution, TCP connect and TLS handshake are
+/// timed, so all phases describe one real request rather than a throwaway probe.
+async fn probe_hop(
     connector: &TokioTlsConnector,
-    resolver: &AsyncResolver<
-        GenericConnector<trust_dns_resolver::name_server::TokioRuntimeProvider>,
-    >,
-    with_tls: bool,
-) -> Result<HttpProbeResult, String> {
+    resolver: &TokioAsyncResolver,
+    url: &str,
+) -> Result<HopResult, String> {
+    let parsed = Url::parse(url).map_err(|e| format!("Invalid URL {url}: {e}"))?;
+    let scheme = parsed.scheme();
+    let is_https = scheme.eq_ignore_ascii_case("https");
+    if !is_https && !scheme.eq_ignore_ascii_case("http") {
+        return Err(format!("Unsupported scheme '{scheme}' for {url}"));
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| format!("URL has no host: {url}"))?
+        .to_string();
+    let port = parsed
+        .port_or_known_default()
+        .ok_or_else(|| format!("Could not determine port for {url}"))?;
+
     // step one: DNS resolution
     let dns_start = Instant::now();
-    if host.is_empty() {
-        return Err("Host is empty".to_string());
-    }
-    let ip = match resolver.lookup_ip(host).await {
-        Ok(lookup) => {
-            // Use the first IP address from the lookup result
-            lookup
-                .iter()
-                .next()
-                .ok_or_else(|| format!("No IP addresses found for host {host}"))
-        }
-        Err(e) => return Err(format!("DNS resolution failed for host {host}: {e}")),
-    };
-    let dns_time = Some(dns_start.elapsed().as_secs_f64());
+    let ip = resolver
+        .lookup_ip(host.as_str())
+        .await
+        .map_err(|e| format!("DNS resolution failed for host {host}: {e}"))?
+        .iter()
+        .next()
+        .ok_or_else(|| format!("No IP addresses found for host {host}"))?;
+    let dns_time = dns_start.elapsed().as_secs_f64();
 
     // step two: TCP connection
     let connect_start = Instant::now();
-    let socket_addr = match with_tls {
-        // true connect to port 80, otherwise port 443
-        true => SocketAddr::new(ip?, 443),
-        false => SocketAddr::new(ip?, 80),
-    };
-    let connect_deadline = Duration::from_secs(3); // tune per environment
-    let stream = match timeout(connect_deadline, TcpStream::connect(socket_addr)).await {
+    let socket_addr = SocketAddr::new(ip, port);
+    let connect_deadline = Duration::from_secs(5);
+    let tcp = match timeout(connect_deadline, TcpStream::connect(socket_addr)).await {
         Ok(Ok(s)) => s,
-        Ok(Err(e)) => return Err(format!("Failed to connect to host {host}: {e}")),
-        Err(_) => return Err(format!("Connect timeout after {:?} to {host}", connect_deadline)),
-    };
-
-    // step tree: TCP connection established
-    let connect_time = Some(connect_start.elapsed().as_secs_f64());
-    if !with_tls {
-        return Ok(HttpProbeResult {
-            dns_time,
-            cert_validity_seconds: None,
-            connect_time,
-            tls_time: None,
-        });
-    }
-
-    // step four: TLS handshake
-    let tls_start = Instant::now();
-    let tls_stream = connector.connect(host, stream).await;
-    let (tls_time, cert_validity_seconds) = match tls_stream {
-        Ok(tls_stream) => {
-            let tls_time = Some(tls_start.elapsed().as_secs_f64());
-
-            // step five: Parse the certificate and calculate its validity
-            let cert_der = tokio::task::spawn_blocking(move || {
-                let cert = tls_stream.get_ref().peer_certificate().ok().flatten()?;
-                cert.to_der().ok()
-            })
-            .await;
-
-            let cert_der = match cert_der {
-                Ok(Some(cert)) => cert,
-                _ => return Err(format!("Failed to retrieve certificate for host {host}")),
-            };
-
-            let parsed = parse_x509_certificate(&cert_der);
-            let (_, parsed) = match parsed {
-                Ok(cert) => cert,
-                Err(e) => return Err(format!("Failed to parse certificate for host {host}: {e}")),
-            };
-            let not_after = parsed.validity().not_after.timestamp();
-            let cert_validity_seconds = Some((not_after) as f64);
-            (tls_time, cert_validity_seconds)
-        }
-        Err(e) => {
-            log::error!("Failed to establish TLS connection for host {host}: {e}");
+        Ok(Err(e)) => return Err(format!("Failed to connect to {host}:{port}: {e}")),
+        Err(_) => {
             return Err(format!(
-                "Failed to establish TLS connection for host {host}: {e}"
+                "Connect timeout after {connect_deadline:?} to {host}:{port}"
             ));
         }
     };
+    let connect_time = connect_start.elapsed().as_secs_f64();
 
-    Ok(HttpProbeResult {
+    // step three: TLS handshake (https only), capturing ALPN and certificate expiry
+    let mut tls_time = None;
+    let mut cert_validity_seconds = None;
+    let mut alpn_h2 = false;
+
+    let stream: DynStream = if is_https {
+        let tls_start = Instant::now();
+        let tls_stream = connector
+            .connect(&host, tcp)
+            .await
+            .map_err(|e| format!("Failed to establish TLS connection for host {host}: {e}"))?;
+        tls_time = Some(tls_start.elapsed().as_secs_f64());
+
+        {
+            let raw = tls_stream.get_ref();
+            if let Ok(Some(proto)) = raw.negotiated_alpn() {
+                alpn_h2 = proto == b"h2";
+            }
+            if let Ok(Some(cert)) = raw.peer_certificate() {
+                if let Ok(der) = cert.to_der() {
+                    if let Ok((_, parsed_cert)) = parse_x509_certificate(&der) {
+                        cert_validity_seconds =
+                            Some(parsed_cert.validity().not_after.timestamp() as f64);
+                    }
+                }
+            }
+        }
+
+        Box::new(tls_stream)
+    } else {
+        Box::new(tcp)
+    };
+
+    // step four: send the HTTP request over the same connection, measuring
+    // time-to-first-byte (processing) and body transfer separately.
+    let io = TokioIo::new(stream);
+    let host_header = match parsed.port() {
+        Some(p) => format!("{host}:{p}"),
+        None => host.clone(),
+    };
+    let path_and_query = match parsed.query() {
+        Some(q) => format!("{}?{}", parsed.path(), q),
+        None => parsed.path().to_string(),
+    };
+
+    let http_start = Instant::now();
+    let resp = if alpn_h2 {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(url)
+            .header(header::USER_AGENT, USER_AGENT_VALUE)
+            .body(Empty::<Bytes>::new())
+            .map_err(|e| format!("Failed to build request for {url}: {e}"))?;
+
+        let (mut sender, conn) = http2::handshake(TokioExecutor::new(), io)
+            .await
+            .map_err(|e| format!("HTTP/2 handshake failed for {host}: {e}"))?;
+        tokio::spawn(async move {
+            let _ = conn.await;
+        });
+        sender
+            .send_request(req)
+            .await
+            .map_err(|e| format!("HTTP/2 request failed for {url}: {e}"))?
+    } else {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(&path_and_query)
+            .header(header::HOST, &host_header)
+            .header(header::USER_AGENT, USER_AGENT_VALUE)
+            .body(Empty::<Bytes>::new())
+            .map_err(|e| format!("Failed to build request for {url}: {e}"))?;
+
+        let (mut sender, conn) = http1::handshake(io)
+            .await
+            .map_err(|e| format!("HTTP handshake failed for {host}: {e}"))?;
+        tokio::spawn(async move {
+            let _ = conn.await;
+        });
+        sender
+            .send_request(req)
+            .await
+            .map_err(|e| format!("HTTP request failed for {url}: {e}"))?
+    };
+    let processing_time = http_start.elapsed().as_secs_f64();
+
+    let http_status = resp.status().as_u16();
+    let http_version = http_version_to_f64(resp.version());
+    let location = resp
+        .headers()
+        .get(header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // step five: read the response body
+    let transfer_start = Instant::now();
+    resp.into_body()
+        .collect()
+        .await
+        .map_err(|e| format!("Failed to read body for {url}: {e}"))?;
+    let transfer_time = transfer_start.elapsed().as_secs_f64();
+
+    Ok(HopResult {
         dns_time,
-        cert_validity_seconds,
         connect_time,
         tls_time,
+        processing_time,
+        transfer_time,
+        cert_validity_seconds,
+        http_status,
+        http_version,
+        location,
     })
 }
 
-/// Convert reqwest HTTP version to a float representation
-/// # Arguments
-///     * `version` - The HTTP version from reqwest
-/// # Returns
-///     A float representation of the HTTP version (e.g., 1.1 -> 1.1, 2.0 -> 2.0)
-fn convert_http_version(version: reqwest::Version) -> f64 {
-    match version {
-        reqwest::Version::HTTP_09 => 0.9,
-        reqwest::Version::HTTP_10 => 1.0,
-        reqwest::Version::HTTP_11 => 1.1,
-        reqwest::Version::HTTP_2 => 2.0,
-        reqwest::Version::HTTP_3 => 3.0,
-        _ => 0.0, // Default case for unknown versions
-    }
-}
-
-/// Probes a URL to validate its connectivity and performance metrics.
-/// # Arguments
-///     * `client` - An instance of `reqwest::Client` for making HTTP requests.
-///     * `connector` - An instance of `TokioTlsConnector` for establishing TLS connections.
-///     * `resolver` - An instance of `AsyncResolver` for DNS resolution.
-///     * `url` - The URL to probe, which should be a valid HTTP or HTTPS URL.
-/// # Returns
-///     A `Result` containing a `ProbeResult` struct with the probe metrics if successful, or an error message if the probe fails.
+/// Probes a URL, following redirects up to [`MAX_REDIRECTS`] hops.
+///
+/// Per-phase timings are summed across every hop in the redirect chain, while the
+/// reported status, HTTP version and certificate expiry come from the final
+/// response. The `url` field of the result keeps the originally configured target
+/// so its Mimir labels stay stable regardless of where the redirects lead.
+///
 /// # Errors
-///     Returns an error string if the URL parsing fails, DNS resolution fails, connection fails, or HTTP request fails.
+/// Returns an error string if any hop fails to resolve, connect, handshake or
+/// exchange, if a redirect target is unparseable, or if the redirect limit is hit.
 async fn probe_url(
-    client: reqwest::Client,
     connector: &TokioTlsConnector,
-    resolver: &AsyncResolver<
-        GenericConnector<trust_dns_resolver::name_server::TokioRuntimeProvider>,
-    >,
+    resolver: &TokioAsyncResolver,
     url: &str,
 ) -> Result<ProbeResult, String> {
     let probe_start = Instant::now();
-    let url = url.to_string();
 
-    let parsed_url = Url::parse(&url).ok();
-    let host = parsed_url
-        .as_ref()
-        .and_then(|u| u.host_str())
-        .unwrap_or_default()
-        .to_string();
+    let mut current = url.to_string();
+    let mut dns_time = 0.0;
+    let mut connect_time = 0.0;
+    let mut tls_time: Option<f64> = None;
+    let mut processing_time = 0.0;
+    let mut transfer_time = 0.0;
+    let mut redirects = 0usize;
 
-    let probe_result =
-        get_connect_timings(&host, connector, resolver, url.starts_with("https://")).await?;
-    // Measure HTTP probe
-    let start = Instant::now();
-    let status_result = client.get(&url).send().await;
-    let (processing_time, transfer_time, http_status, http_version) = match status_result {
-        Ok(resp) => {
-            let time_till_first_byte = start.elapsed().as_secs_f64();
-            let http_status_val = resp.status().as_u16();
-            let http_version_val = convert_http_version(resp.version());
+    loop {
+        let hop = probe_hop(connector, resolver, &current).await?;
 
-            let transfer_start = Instant::now();
-            let _ = resp
-                .bytes()
-                .await
-                .map_err(|e| format!("Failed to read body: {e}"))?;
-            let transfer_time_val = transfer_start.elapsed().as_secs_f64();
-            (
-                Some(time_till_first_byte),
-                Some(transfer_time_val),
-                Some(http_status_val),
-                Some(http_version_val),
-            )
+        dns_time += hop.dns_time;
+        connect_time += hop.connect_time;
+        if let Some(t) = hop.tls_time {
+            tls_time = Some(tls_time.unwrap_or(0.0) + t);
         }
-        Err(e) => {
-            let error = report(&e);
-            log::error!("HTTP request failed for URL {url}: {error}");
-            return Err(format!("HTTP request failed for URL {url}: {e}"));
+        processing_time += hop.processing_time;
+        transfer_time += hop.transfer_time;
+
+        let is_redirect = (300..400).contains(&hop.http_status);
+        match hop.location {
+            Some(location) if is_redirect => {
+                if redirects >= MAX_REDIRECTS {
+                    return Err(format!("Exceeded {MAX_REDIRECTS} redirects starting at {url}"));
+                }
+                let base =
+                    Url::parse(&current).map_err(|e| format!("Invalid URL {current}: {e}"))?;
+                let next = base.join(&location).map_err(|e| {
+                    format!("Invalid redirect target '{location}' from {current}: {e}")
+                })?;
+                current = next.to_string();
+                redirects += 1;
+            }
+            _ => {
+                return Ok(ProbeResult {
+                    url: url.to_string(),
+                    dns_time: Some(dns_time),
+                    connect_time: Some(connect_time),
+                    tls_time,
+                    processing_time: Some(processing_time),
+                    cert_validity_seconds: hop.cert_validity_seconds,
+                    http_status: Some(hop.http_status),
+                    http_version: Some(hop.http_version),
+                    transfer_time: Some(transfer_time),
+                    total_probe_time: probe_start.elapsed().as_secs_f64(),
+                    redirects: redirects as u32,
+                });
+            }
         }
-    };
-
-    // Measure certificate validity days
-    let total_probe_time = probe_start.elapsed().as_secs_f64();
-
-    Ok(ProbeResult {
-        url: url.to_string(),
-        dns_time: probe_result.dns_time,
-        connect_time: probe_result.connect_time,
-        tls_time: probe_result.tls_time,
-        processing_time,
-        cert_validity_seconds: probe_result.cert_validity_seconds,
-        http_status,
-        http_version,
-        transfer_time,
-        total_probe_time,
-    })
+    }
 }
 
 fn jitter(max_ms: u64) -> Duration {
@@ -239,14 +308,6 @@ pub async fn run_probe_loop(
     max_org_width: usize,
     semaphore: Arc<Semaphore>,
 ) {
-    // Build ONE client per org loop (or even global) and reuse it.
-    let client = Client::builder()
-        .timeout(Duration::from_secs(5))
-        .danger_accept_invalid_certs(true)
-        .user_agent("reqwest-h2-h3-probe/1.0")
-        .build()
-        .expect("Failed to create client");
-
     loop {
         let start_time = Instant::now();
         let mut handles = Vec::with_capacity(org_config.targets.len());
@@ -263,10 +324,9 @@ pub async fn run_probe_loop(
             let org_id = org_config.organisation_id.clone();
             let labels = target.labels.clone();
             let mimir_endpoint = mimir_endpoint.clone();
-            let client = client.clone();
 
             handles.push(tokio::spawn(async move {
-                // ✅ Permit is held until the task returns
+                // Permit is held until the task returns
                 let _permit = semaphore.acquire_owned().await.expect("Semaphore closed");
 
                 sleep(jitter(250)).await;
@@ -276,7 +336,6 @@ pub async fn run_probe_loop(
                         tenant_name,
                         &org_id,
                         &target,
-                        client,
                         &connector,
                         &resolver,
                         &mimir_endpoint,
@@ -287,9 +346,7 @@ pub async fn run_probe_loop(
                 })
                 .await;
 
-                if let Err(_) = result {
-                    // timeout fired
-                    // (optionally) emit a metric/log here for "probe timeout"
+                if result.is_err() {
                     log::warn!("Probe timed out for {}", target.url);
                 }
             }));
@@ -327,7 +384,6 @@ fn to_fixed_width(input: &str, width: usize) -> String {
 ///     * `tenant` - The tenant name for logging and metrics.
 ///     * `org_id` - The organisation ID for Mimir metrics.
 ///     * `target` - The target configuration containing the URL and accepted status codes.
-///     * `client` - The HTTP client used for making requests.
 ///     * `tls_connector` - The TLS connector for establishing secure connections.
 ///     * `resolver` - The DNS resolver for resolving hostnames.
 ///     * `mimir_target` - The Mimir endpoint to send metrics to.
@@ -337,7 +393,6 @@ async fn handle_target_probe(
     tenant: String,
     org_id: &str,
     target: &TargetConfig,
-    client: Client,
     tls_connector: &TokioTlsConnector,
     resolver: &TokioAsyncResolver,
     mimir_target: &str,
@@ -345,7 +400,7 @@ async fn handle_target_probe(
     labels: Option<Vec<(String, String)>>,
 ) {
     let url = &target.url;
-    let result = probe_url(client.clone(), tls_connector, resolver, url).await;
+    let result = probe_url(tls_connector, resolver, url).await;
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -353,11 +408,11 @@ async fn handle_target_probe(
         .as_secs_f64();
     let padded_tenant = to_fixed_width(&tenant, max_width);
 
-    let labels = labels.as_ref().map(|l| {                                                                                                                                                                                                               
-        l.iter()                                                                                                                                                                                                                                         
+    let labels = labels.as_ref().map(|l| {
+        l.iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect::<Vec<(&str, &str)>>()                                                                                                                                                                                                              
-    });      
+            .collect::<Vec<(&str, &str)>>()
+    });
 
     match result {
         Ok(probe) => {
@@ -385,11 +440,7 @@ async fn handle_target_probe(
                 );
             }
 
-            let metrics = create_probe_metrics(
-                &probe, 
-                accepted, 
-                labels
-            );
+            let metrics = create_probe_metrics(&probe, accepted, labels);
 
             if let Err(e) = send_to_mimir(mimir_target, Some(org_id), metrics).await {
                 log::error!("[{padded_tenant}] Failed to send metrics for {url}: {e}");
@@ -409,6 +460,7 @@ async fn handle_target_probe(
                 http_version: None,
                 transfer_time: None,
                 total_probe_time: 0.0,
+                redirects: 0,
             };
             let metrics = create_probe_metrics(&probe, false, labels);
             if let Err(e) = send_to_mimir(mimir_target, Some(org_id), metrics).await {
