@@ -95,6 +95,8 @@ demo:
     - url: https://www.github.com
       accepted_status_codes: [200, 301]
     - url: https://grafana.com/
+    - url: https://cloudflare-quic.com
+      http3: true
 
 organisationX:
   organisation_id: another-org
@@ -114,6 +116,9 @@ Each top-level key (e.g., `demo`, `organisationX`) represents a distinct probe g
   * `url`: The target URL.
   * `accepted_status_codes` (optional): A list of HTTP status codes considered successful.
   * `labels` (optional): A list of additional labels to send with the timeseries metrics.
+  * `http3` (optional): Probe this target over HTTP/3 (QUIC) instead of HTTP/1.1 or HTTP/2 over TCP. Requires an `https` URL. Defaults to `false`.
+  * `connect_timeout_seconds` (optional): Per-target TCP/QUIC connect timeout, overriding `CONNECT_TIMEOUT_SECONDS` for this target.
+  * `probe_timeout_seconds` (optional): Per-target overall probe timeout (covers the whole redirect chain), overriding `PROBE_TIMEOUT_SECONDS` for this target. Should be at least as large as the connect timeout.
 
 ---
 
@@ -128,6 +133,8 @@ The following environment variables can be used to configure Oxybox’s runtime 
 | `MIMIR_ENDPOINT`        | `http://mimir.grafana.svc.cluster.local:9090/` | `http://localhost:9009` |
 | `RUST_LOG`              | `debug`                                        | `error`                 |
 | `MAX_CONCURRENT_PROBES` | `24`                                           | `32`                    |
+| `CONNECT_TIMEOUT_SECONDS` | `10`                                         | `5`                     |
+| `PROBE_TIMEOUT_SECONDS` | `20`                                           | `10`                    |
 
 
 These can be defined in a `.env` file or passed directly through your environment.

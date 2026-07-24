@@ -14,9 +14,7 @@ edition = "2024"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json",  "rustls-tls", "http3"] }
-native-tls = { version = "0.2", features = ["alpn"] }
-tokio-native-tls = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "http2", "http3"] }
 x509-parser = "0.18"
 url = "2"
 prost = "0.14"
@@ -28,9 +26,11 @@ trust-dns-resolver = { version = "0.23", features = ["tokio-runtime", "system-co
 hyper = { version = "1.6.0", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs"] }
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
 serde = { version = "1.0", features = ["derive"] }
 unicode-truncate = "2.0"
-openssl = { version = "0.10", features = ["vendored"] }
 serde_yaml = "0.9"
 dotenvy = "0.15"
 env_logger = "0.11"

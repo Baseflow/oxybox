@@ -41,6 +41,21 @@ pub struct TargetConfig {
     /// For example, you could include labels like `env: production` or `region: us-east-1` to provide more context about the target service in the metrics.
     #[serde(default, deserialize_with = "deserialize_labels")]
     pub labels: Option<Vec<(String, String)>>,
+
+    /// Probe this target over HTTP/3 (QUIC) instead of HTTP/1.1 or HTTP/2 over TCP.
+    /// Requires an `https` URL. Defaults to `false`.
+    #[serde(default)]
+    pub http3: bool,
+
+    /// Per-target TCP/QUIC connect timeout in seconds. Overrides the global
+    /// `CONNECT_TIMEOUT_SECONDS` for this target when set.
+    #[serde(default)]
+    pub connect_timeout_seconds: Option<u64>,
+
+    /// Per-target overall probe timeout in seconds (covers the whole redirect
+    /// chain). Overrides the global `PROBE_TIMEOUT_SECONDS` for this target when set.
+    #[serde(default)]
+    pub probe_timeout_seconds: Option<u64>,
 }
 
 fn default_status_codes() -> Vec<u16> {
@@ -96,5 +111,44 @@ pub mod test {
         assert_eq!(org_x_config.targets[0].url, "http://www.example.com");
         // check default status codes
         assert_eq!(org_x_config.targets[0].accepted_status_codes, vec![200]);
+    }
+
+    #[test]
+    fn test_timeout_overrides_default_and_parse() {
+        let yaml = r#"
+                    demo:
+                        organisation_id: demo
+                        polling_interval_seconds: 10
+                        targets:
+                            - url: https://slow.example
+                              connect_timeout_seconds: 15
+                              probe_timeout_seconds: 30
+                            - url: https://default.example
+                    "#;
+
+        let config: Config = serde_yaml::from_str(yaml).expect("Invalid YAML");
+        let demo = config.get("demo").expect("Demo config not found");
+        assert_eq!(demo.targets[0].connect_timeout_seconds, Some(15));
+        assert_eq!(demo.targets[0].probe_timeout_seconds, Some(30));
+        assert_eq!(demo.targets[1].connect_timeout_seconds, None);
+        assert_eq!(demo.targets[1].probe_timeout_seconds, None);
+    }
+
+    #[test]
+    fn test_http3_flag_defaults_and_parses() {
+        let yaml = r#"
+                    demo:
+                        organisation_id: demo
+                        polling_interval_seconds: 10
+                        targets:
+                            - url: https://quic.example
+                              http3: true
+                            - url: https://tcp.example
+                    "#;
+
+        let config: Config = serde_yaml::from_str(yaml).expect("Invalid YAML");
+        let demo = config.get("demo").expect("Demo config not found");
+        assert!(demo.targets[0].http3, "http3 should parse as true");
+        assert!(!demo.targets[1].http3, "http3 should default to false");
     }
 }

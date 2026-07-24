@@ -16,3 +16,5 @@ organisationX:
       labels:
         environment: production
         hello: world
+    - url: https://cloudflare-quic.com
+      http3: true

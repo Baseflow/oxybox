@@ -1,4 +1,6 @@
-use config::app_config::{load_config, setup_resolver, setup_tls_connector};
+use config::app_config::{
+    ProbeClients, load_config, setup_quic_client_config, setup_resolver, setup_tls_connector,
+};
 use dotenvy::dotenv;
 use std::{sync::Arc, time::Duration};
 use tokio::{sync::Semaphore, time::sleep};
@@ -14,6 +16,12 @@ async fn main() {
     let app_config = load_config();
     let resolver = setup_resolver(&app_config.dns_hosts).expect("Failed to init resolver");
     let tls_connector = setup_tls_connector().expect("Failed to build TLS connector");
+    let quic_config = setup_quic_client_config().expect("Failed to build QUIC client config");
+    let clients = ProbeClients {
+        resolver,
+        tls_connector,
+        quic_config,
+    };
 
     log::info!("Using Mimir endpoint: {}", app_config.mimir_endpoint);
 
@@ -24,9 +32,10 @@ async fn main() {
     );
     let semaphore = Arc::new(Semaphore::new(max_concurrent_probes));
 
+    let timeouts = app_config.timeouts;
+
     for (key, org_config) in app_config.config {
-        let resolver = resolver.clone();
-        let tls_connector = tls_connector.clone();
+        let clients = clients.clone();
         let max_org_width = app_config.max_org_width;
         let mimir_endpoint = app_config.mimir_endpoint.clone();
 
@@ -36,11 +45,11 @@ async fn main() {
         tokio::spawn(run_probe_loop(
             key,
             org_config,
-            resolver,
-            tls_connector,
+            clients,
             mimir_endpoint,
             max_org_width,
-            semaphore
+            semaphore,
+            timeouts,
         ));
     }
 
