@@ -4,6 +4,8 @@ pub mod prometheus {
     }
 }
 
+use std::sync::OnceLock;
+
 use chrono::Utc;
 use prometheus::prompb::{Label, Sample, TimeSeries, WriteRequest};
 use reqwest::{
@@ -12,6 +14,14 @@ use reqwest::{
 };
 
 use snap::raw::Encoder;
+
+/// A process-wide reqwest client reused for every Mimir push. Building a new
+/// client per request discards the connection pool and opens a fresh TCP/TLS
+/// connection each time, which adds latency and pressures cluster SNAT ports.
+fn mimir_client() -> &'static Client {
+    static CLIENT: OnceLock<Client> = OnceLock::new();
+    CLIENT.get_or_init(Client::new)
+}
 
 /// Sends Prometheus metrics to a Mimir remote write endpoint.
 ///
@@ -55,8 +65,7 @@ pub async fn send_to_mimir(
         headers.insert("X-Scope-OrgID", HeaderValue::from_str(id)?);
     }
 
-    let client = Client::new();
-    let response = client
+    let response = mimir_client()
         .post(format!("{mimir_endpoint}/api/v1/push")) // Mimir's remote write endpoint
         .headers(headers)
         .body(compressed_data)
