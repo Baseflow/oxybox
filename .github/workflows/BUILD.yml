@@ -22,7 +22,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      # SonarCloud geeft 403 zolang SONAR_TOKEN niet geldig is. De scan mag de
+      # build niet blokkeren; de docker-build en vulnerability scan erachter wel.
       - name: SonarQube Scan
+        continue-on-error: true
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
